@@ -58,3 +58,12 @@ sealed objects for acceptance tests; omit it for the normal 256 KiB threshold.
 `NEON_SHAPE_DIAGNOSTICS=true` logs event names and owner closure reasons without
 credentials. The local process sweeps expired prefixes at startup and every
 minute; this is not a platform background-execution guarantee.
+
+To investigate full-duration failures, optionally set
+`NEON_SHAPE_DIAGNOSTICS_FILE` to an absolute ignored file path alongside
+`NEON_SHAPE_DIAGNOSTICS=true`. Each safe event record includes a process ID and
+module-instance ID; boot and owner-close records identify reloads or source loss.
+The expiry runner checks optional HEAD liveness every 30 seconds and saves both a
+latest report and a per-run report. These probes are test instrumentation; normal
+application/proxy flows still require GET only. Finish code/build changes before
+starting the acceptance run to avoid mixing hot reload with expiry behavior.

@@ -106,8 +106,12 @@ export class DurableStreamsTransport<T extends Row<unknown>>
       )
       const handle = response.headers.get('electric-handle')
       if (handle) observedHandle = handle
+      const normalized = normalizeHeaders(response)
+      // Only queue metadata for a response actually returned to the reader.
+      // If normalization throws, native fetch retries must not leave a stale
+      // entry that would be paired with a later successful response body.
       if (response.ok) responses.push({ response, offset: requestedOffset })
-      return normalizeHeaders(response)
+      return normalized
     }
 
     try {
@@ -186,7 +190,10 @@ export class DurableStreamsTransport<T extends Row<unknown>>
               }))
             }
           }
-          if (envelope.kind === 'snapshot-complete') {
+          if (
+            envelope.kind === 'snapshot-complete' ||
+            envelope.kind === 'progress'
+          ) {
             raw = [
               {
                 headers: {
@@ -317,11 +324,14 @@ export function normalizeHeaders(response: Response): Response {
       /* Validate proof outside the reader's fetch retry loop. */
     }
   }
-  return new Response(response.body, {
-    status: response.status,
-    statusText: response.statusText,
-    headers,
-  })
+  return new Response(
+    [204, 205, 304].includes(response.status) ? null : response.body,
+    {
+      status: response.status,
+      statusText: response.statusText,
+      headers,
+    }
+  )
 }
 
 async function pause(ms: number, signal: AbortSignal): Promise<void> {

@@ -5,6 +5,18 @@ import {
   createS3LogStore,
   ObjectShapeLog,
 } from '@neon/realtime-electric-server'
+import { appendFileSync } from 'node:fs'
+import { randomUUID } from 'node:crypto'
+
+const instance = randomUUID()
+function diagnose(entry: Record<string, unknown>) {
+  if (process.env.NEON_SHAPE_DIAGNOSTICS !== 'true') return
+  const line = JSON.stringify({ ...entry, instance, pid: process.pid })
+  console.log(line)
+  if (process.env.NEON_SHAPE_DIAGNOSTICS_FILE)
+    appendFileSync(process.env.NEON_SHAPE_DIAGNOSTICS_FILE, line + '\n')
+}
+diagnose({ event: 'function_started', timestamp: Date.now() })
 
 function required(name: string): string {
   const value = process.env[name]
@@ -17,13 +29,11 @@ const source = createNeonRealtimeSource({
   db: new URL(required('DATABASE_URL')).pathname.slice(1),
   logLevel: process.env.NEON_SHAPE_DIAGNOSTICS === 'true' ? 'debug' : 'silent',
   logger: (entry) =>
-    console.log(
-      JSON.stringify({
-        event: entry.event,
-        timestamp: entry.timestamp,
-        ...('code' in entry ? { code: entry.code } : {}),
-      })
-    ),
+    diagnose({
+      event: entry.event,
+      timestamp: entry.timestamp,
+      ...('code' in entry ? { code: entry.code } : {}),
+    }),
 })
 const storage = process.env.NEON_SHAPE_LOG_BUCKET
   ? createS3LogStore({ bucket: process.env.NEON_SHAPE_LOG_BUCKET })
@@ -49,15 +59,12 @@ const handler = createShapeHandler({
         })
     : undefined,
   onOwnerClosed: ({ handle, error }) => {
-    if (process.env.NEON_SHAPE_DIAGNOSTICS === 'true')
-      console.log(
-        JSON.stringify({
-          event: 'shape_owner_closed',
-          handle,
-          timestamp: Date.now(),
-          reason: error.message,
-        })
-      )
+    diagnose({
+      event: 'shape_owner_closed',
+      handle,
+      timestamp: Date.now(),
+      reason: error.message,
+    })
   },
   async authorize(request) {
     // This local example exposes only its dedicated test table. Applications must

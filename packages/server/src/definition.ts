@@ -70,6 +70,24 @@ export function resolveConfiguredShape(
         fail('Invalid filter parameters')
       }
     }
+    const bracketed = [...url.searchParams].filter(([key]) =>
+      key.startsWith('params[')
+    )
+    if (bracketed.length) {
+      if (encoded) fail('Ambiguous filter parameter encodings')
+      const values: Record<string, string> = Object.create(null)
+      for (const [key, value] of bracketed) {
+        const position = /^params\[([1-9][0-9]*)\]$/.exec(key)?.[1]
+        if (
+          !position ||
+          !Number.isSafeInteger(Number(position)) ||
+          Object.hasOwn(values, position)
+        )
+          fail('Invalid or repeated filter parameter')
+        values[position] = value
+      }
+      bindings = values
+    }
     if (!bindings || typeof bindings !== 'object')
       fail('Invalid filter parameters')
     let rest = where.trim()

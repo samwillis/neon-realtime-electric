@@ -47,6 +47,114 @@ for (const electricOnly of [false, true]) {
   describe(
     electricOnly ? 'Electric header allowlist' : 'native headers',
     () => {
+      it('exposes progress MVCC to eager transaction acknowledgement only after covered changes are installed', async () => {
+        const server = new QueryShapeServer(electricOnly)
+        servers.push(server)
+        await server.start()
+        const created = deferred<FixtureShape>()
+        server.onCreate = (owner) => created.resolve(owner)
+        const abort = new AbortController()
+        const stream = new ShapeStream<{
+          id: number
+          name: string
+          done: boolean
+        }>({
+          url: `${server.url}/api/shape`,
+          params: { table: 'items' },
+          signal: abort.signal,
+        })
+        const shape = new Shape(stream)
+        let covered = false
+        stream.subscribe((messages) => {
+          for (const message of messages)
+            if (
+              'control' in message.headers &&
+              message.headers.control === 'snapshot-end' &&
+              message.headers.xmin === '100'
+            ) {
+              expect(shape.currentRows[0].name).toBe('covered')
+              covered = true
+            }
+        })
+        try {
+          const owner = await created.promise
+          await baseline(server, owner)
+          await shape.rows
+          await server.append(owner, {
+            version: 1,
+            seq: '4',
+            kind: 'publication',
+            changes: [
+              {
+                key: '"public"."items"/"1"',
+                value: { id: '1', name: 'covered', done: 'f' },
+                headers: { operation: 'update' },
+              },
+            ],
+            evidence: { txids: ['99'], lsn: '501' },
+          })
+          await server.append(owner, {
+            version: 1,
+            seq: '5',
+            kind: 'progress',
+            coveredSeq: '4',
+            evidence: { snapshot: { xmin: '100', xmax: '101', xip_list: [] } },
+          })
+          await expect.poll(() => covered).toBe(true)
+        } finally {
+          abort.abort()
+        }
+      })
+
+      it('does not pair a retried body with metadata from a response that failed normalization', async () => {
+        const server = new QueryShapeServer(electricOnly)
+        servers.push(server)
+        await server.start()
+        let prepared = Promise.resolve()
+        server.onCreate = (owner) => {
+          prepared = baseline(server, owner)
+        }
+        let faulted = false
+        const controller = new AbortController()
+        const stream = new ShapeStream({
+          url: `${server.url}/api/shape`,
+          params: { table: 'items' },
+          subscribe: false,
+          signal: controller.signal,
+          backoffOptions: { initialDelay: 1, maxDelay: 1, multiplier: 1 },
+          fetchClient: async (input, init) => {
+            const response = await fetch(input, init)
+            await prepared
+            if (!faulted) {
+              faulted = true
+              const headers = new Headers(response.headers)
+              headers.delete('electric-schema')
+              const broken = new Response(await response.arrayBuffer(), {
+                status: 200,
+                headers,
+              })
+              Object.defineProperty(broken, 'body', {
+                get() {
+                  throw new TypeError('Transient custom-fetch body failure')
+                },
+              })
+              return broken
+            }
+            return response
+          },
+        })
+        try {
+          const shape = new Shape(stream)
+          expect(await shape.rows).toEqual([
+            { id: 1, name: 'first', done: false },
+          ])
+          expect(faulted).toBe(true)
+          expect(server.shapes.size).toBe(1)
+        } finally {
+          controller.abort()
+        }
+      })
+
       it('refetches safely when a shape expires before baseline completion', async () => {
         const server = new QueryShapeServer(electricOnly)
         servers.push(server)

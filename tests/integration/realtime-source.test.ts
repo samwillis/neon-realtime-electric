@@ -1,3 +1,4 @@
+import { ShapeOwner } from '../../packages/server/src/shape-owner.js'
 import { randomUUID } from 'node:crypto'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { Client } from 'pg'
@@ -52,6 +53,10 @@ describe('real staging Realtime source evidence', () => {
     try {
       await client.connect()
       connected = true
+      expect(
+        (await client.query('show wal_level')).rows[0].wal_level,
+        'Enable logical replication on the dedicated staging project before live tests'
+      ).toBe('logical')
       // The generated identifier contains only a constant prefix and UUID hex.
       await client.query(`create schema "${schema}"`)
       await client.query(
@@ -185,6 +190,169 @@ describe('real staging Realtime source evidence', () => {
       try {
         if (connected)
           await client.query(`drop schema if exists "${schema}" cascade`)
+      } finally {
+        await client.end()
+      }
+    }
+  })
+
+  it('reconciles writes committed while baseline delivery is held, preserving a multichunk owner snapshot and publication order', async () => {
+    const databaseUrl = required('DATABASE_URL')
+    const client = new Client({
+      connectionString: databaseUrl,
+      connectionTimeoutMillis: 15_000,
+      query_timeout: 15_000,
+    })
+    const relay = await recordRealtimeWire(required('NEON_REALTIME_URL'), {
+      holdBaselineEnd: true,
+    })
+    const source = createNeonRealtimeSource({
+      url: relay.url,
+      secret: required('NEON_REALTIME_SECRET'),
+      db: new URL(databaseUrl).pathname.slice(1),
+    })
+    const schema = `electric_cut_${randomUUID().replaceAll('-', '')}`
+    const events: SourceEvent[] = []
+    let owner: ShapeOwner | undefined
+    try {
+      await client.connect()
+      await client.query(`create schema "${schema}"`)
+      await client.query(
+        `create table "${schema}".items(id int primary key, label text, enabled boolean not null)`
+      )
+      await client.query(
+        `insert into "${schema}".items select i, 'seed ' || i, true from generate_series(1,260) i`
+      )
+      const observing = {
+        ...source,
+        async subscribe(
+          query: Parameters<typeof source.subscribe>[0],
+          observer: Parameters<typeof source.subscribe>[1],
+          signal: AbortSignal
+        ) {
+          return source.subscribe(
+            query,
+            {
+              event(event) {
+                events.push(event)
+                observer.event(event)
+              },
+              error: observer.error,
+            },
+            signal
+          )
+        },
+      }
+      owner = new ShapeOwner({
+        source: observing,
+        definition: {
+          query: {
+            sql: `select id,label from "${schema}".items where enabled=true`,
+          },
+          namespace: schema,
+          table: 'items',
+          primaryKey: ['id'],
+          projection: ['id', 'label'],
+          schema: { id: { type: 'int4' }, label: { type: 'text' } },
+        },
+      })
+      await owner.start()
+      await Promise.race([
+        relay.baselineHeld,
+        new Promise((_, reject) => {
+          const timer = setTimeout(
+            () => reject(new Error('Baseline delivery barrier timed out')),
+            20_000
+          )
+          timer.unref()
+        }),
+      ])
+      expect(events.some((e) => e.type === 'baseline')).toBe(false)
+      await client.query('begin')
+      await client.query(`update "${schema}".items set label=null where id=1`)
+      await client.query(
+        `update "${schema}".items set enabled=false where id=2`
+      )
+      await client.query(`update "${schema}".items set id=301 where id=3`)
+      await client.query(
+        `insert into "${schema}".items values(302,'during baseline',true)`
+      )
+      const txid = (
+        await client.query('select pg_current_xact_id()::text as txid')
+      ).rows[0].txid as string
+      await client.query('commit')
+      await expect
+        .poll(
+          () =>
+            relay.messages.some((message) => {
+              const frame = message as { type: string; txids?: string[] }
+              return (
+                frame.type === 'keyed_results' && frame.txids?.includes(txid)
+              )
+            }),
+          { timeout: 20_000 }
+        )
+        .toBe(true)
+      relay.releaseBaseline()
+      await expect
+        .poll(
+          () =>
+            events.some(
+              (e) => e.type === 'publication' && e.txids.includes(txid)
+            ),
+          { timeout: 20_000 }
+        )
+        .toBe(true)
+      await owner.settled()
+      const baseline = events.find((e) => e.type === 'baseline')!
+      if (baseline.type !== 'baseline') throw new Error('Missing baseline')
+      expect(baseline.rows).toHaveLength(260)
+      expect(visible(baseline.mvcc, txid)).toBe(false)
+      expect(events.findIndex((e) => e.type === 'baseline')).toBeLessThan(
+        events.findIndex((e) => e.type === 'publication')
+      )
+      const rows = new Map<string, unknown>()
+      const log = await owner.log.read('-1')
+      expect(
+        log.envelopes.filter((e) => e.kind === 'snapshot-chunk')
+      ).toHaveLength(3)
+      for (const envelope of log.envelopes) {
+        if (
+          envelope.kind === 'snapshot-chunk' ||
+          envelope.kind === 'publication'
+        )
+          for (const change of envelope.changes) {
+            if (!('key' in change))
+              throw new Error('Unexpected move in root shape')
+            if (change.headers.operation === 'delete') rows.delete(change.key)
+            else rows.set(change.key, change.value)
+          }
+      }
+      const expected = await client.query(
+        `select id::text,label from "${schema}".items where enabled=true order by items.id`
+      )
+      const actual = [...rows.values()] as {
+        id: string
+        label: string | null
+      }[]
+      expect(actual.sort((a, b) => Number(a.id) - Number(b.id))).toEqual(
+        expected.rows
+      )
+      expect(log.envelopes.find((e) => e.kind === 'publication')).toMatchObject(
+        { evidence: { txids: [txid] } }
+      )
+    } finally {
+      relay.releaseBaseline()
+      owner?.close()
+      source.close()
+      await relay.close()
+      await mkdir('.artifacts/staging', { recursive: true })
+      await writeFile(
+        '.artifacts/staging/baseline-concurrency.json',
+        JSON.stringify({ events, wire: relay.messages }, null, 2)
+      )
+      try {
+        await client.query(`drop schema if exists "${schema}" cascade`)
       } finally {
         await client.end()
       }

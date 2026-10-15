@@ -16,7 +16,7 @@
     "test:package": "node scripts/test-package-compatibility.mjs",
     "check:upstream": "node scripts/import-electric-client.mjs --check",
     "check:api": "node scripts/compare-public-api.mjs",
-    "lint": "prettier --check scripts/*.mjs package.json pnpm-workspace.yaml tests/compatibility/consumer.ts packages/protocol packages/client/src/transport tests/transport tests/compatibility/proxies vitest.*.config.ts packages/server tests/server tests/integration apps/function neon.ts scripts/test-local-baseline.ts tests/storage scripts/test-local-lifecycle.ts",
+    "lint": "prettier --check scripts/*.mjs package.json pnpm-workspace.yaml tests/compatibility/consumer.ts packages/protocol packages/client/src/transport tests/transport tests/compatibility/proxies vitest.*.config.ts packages/server tests/server tests/integration apps/function neon.ts scripts/test-local-baseline.ts tests/storage scripts/test-local-lifecycle.ts examples tests/compatibility/integrations",
     "test:transport": "vitest run --config vitest.transport.config.ts",
     "test:durable-reader": "node scripts/test-durable-reader-conformance.mjs",
     "test:proxy": "vitest run --config vitest.proxy.config.ts",
@@ -28,7 +28,9 @@
     "test:local-expiry": "node scripts/test-local-expiry.mjs",
     "dev:function": "node --env-file=.env.local scripts/dev-function.mjs",
     "test:storage": "vitest run --config vitest.storage.config.ts",
-    "test:local-lifecycle": "node --env-file=.env.local --import tsx scripts/test-local-lifecycle.ts"
+    "test:local-lifecycle": "node --env-file=.env.local --import tsx scripts/test-local-lifecycle.ts",
+    "test:integration-packages": "pnpm build && node scripts/test-integration-packages.mjs",
+    "test:browser": "node --env-file=.env.local scripts/test-browser-integrations.mjs"
   },
   "devDependencies": {
     "@durable-streams/client": "0.2.7",

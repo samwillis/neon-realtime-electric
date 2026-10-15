@@ -26,20 +26,42 @@ const report = {
   expiresAt: init.expiresAt,
   handle,
   status: 'running',
+  probes: [],
 }
 await mkdir('.artifacts/staging', { recursive: true })
+const history = `.artifacts/staging/local-expiry-${Date.now()}.json`
 const save = () =>
-  writeFile(
-    '.artifacts/staging/local-expiry.json',
-    JSON.stringify(report, null, 2)
+  Promise.all(
+    ['.artifacts/staging/local-expiry.json', history].map((path) =>
+      writeFile(path, JSON.stringify(report, null, 2))
+    )
   )
+let replacement
 await save()
 console.log(
   `Real 15-minute neon dev expiry run started; expires ${init.expiresAt}`
 )
 try {
-  await delay(Math.max(0, expiresAt - Date.now() - 10_000))
+  while (Date.now() < expiresAt - 10_000) {
+    await delay(Math.min(30_000, Math.max(0, expiresAt - Date.now() - 10_000)))
+    const probe = await read(resume, 'HEAD')
+    report.probes.push({
+      at: new Date().toISOString(),
+      remainingMs: expiresAt - Date.now(),
+      status: probe.status,
+      handle: probe.headers.get('electric-handle'),
+    })
+    await save()
+    assert.equal(probe.status, 200, 'Owner was lost before its absolute expiry')
+    assert.equal(probe.headers.get('electric-handle'), handle)
+  }
   const head = await read(resume, 'HEAD')
+  Object.assign(report, {
+    headStatus: head.status,
+    headAt: new Date().toISOString(),
+    headRemainingMs: expiresAt - Date.now(),
+  })
+  await save()
   assert.equal(
     head.status,
     200,
@@ -64,7 +86,7 @@ try {
   await delay(Math.max(0, expiresAt - Date.now() + 100))
   const after = await read(resume)
   assert.equal(after.status, 409)
-  const replacement = after.headers.get('electric-handle')
+  replacement = after.headers.get('electric-handle')
   assert(replacement && replacement !== handle)
   assert.equal(after.headers.get('location'), null)
   Object.assign(report, {
@@ -86,4 +108,10 @@ try {
   })
   await save()
   throw error
+} finally {
+  for (const value of [handle, replacement].filter(Boolean)) {
+    const url = new URL(base)
+    url.searchParams.set('handle', value)
+    await read(url, 'DELETE').catch(() => {})
+  }
 }

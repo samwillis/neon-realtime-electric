@@ -59,7 +59,26 @@ describe('configured root-table POC definitions', () => {
       resolve({ where: 'label IS NOT NULL AND id != -1.5e2' }).query.sql
     ).toContain('"label" IS NOT NULL AND "id" != $1')
   })
+  it('preserves bracketed positional parameters used by existing trusted proxies', () => {
+    const shape = resolve({
+      where: 'label = $1 AND id > $2',
+      'params[1]': "a'b + %",
+      'params[2]': '9007199254740993',
+    })
+    expect(shape.query.parameters).toEqual(["a'b + %", '9007199254740993'])
+    expect(shape.query.sql).toContain('WHERE "label" = $1 AND "id" > $2')
+    expect(() =>
+      resolveConfiguredShape(
+        new URL(
+          'http://local/?table=items&where=id%3D%241&params[1]=1&params[1]=2'
+        ),
+        tables
+      )
+    ).toThrow('repeated')
+  })
   it.each([
+    { where: 'id=$1', 'params[1]': '1', params: '[2]' },
+    { where: 'id=$1', 'params[0]': '1' },
     { table: 'unknown' },
     { table: 'items; drop table items' },
     { columns: 'id,label,' },

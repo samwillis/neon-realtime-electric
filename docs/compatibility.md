@@ -8,11 +8,11 @@ local/staging test target, as agreed in `AGENTS.md`.
 | --------------------------------------------- | -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 0: pristine import and compatibility baseline | Passed                                 | 80-file pinned import; 78 unchanged-file checks; build/typecheck; 553 runtime/declaration checks; identical packed consumers on TS 5.5.4/5.9.3; 62 exports across four declaration entry points                                         |
 | 1: internal transport boundary                | Passed                                 | HTTP adapter extracted; all 553 baseline checks, build/typecheck, packed consumers and 62-export declaration comparison pass                                                                                                            |
-| 2: real Durable Streams delivery              | Implemented; final gate audit pending  | Real reader/reference server; 55 native/protocol tests, 18 packed proxy tests, consumer/lifecycle conformance and clean patch install; early real staging/Function no-reader lifecycle now passes                                       |
+| 2: real Durable Streams delivery              | Implemented; final gate audit pending  | Real reader/reference server; 59 native/protocol tests, 18 packed proxy tests, consumer/lifecycle conformance and clean patch install; early real staging/Function no-reader lifecycle now passes                                       |
 | 3: real staging Realtime                      | Implemented in part; live gate passed  | Pinned SDK evidence patch, source adapter, serialized owner and bounded query compiler; real baseline/live publications and transaction evidence pass after enabling logical replication; see docs/staging-publication-investigation.md |
-| 4: Function handler and lifecycle             | Implemented in part; gates outstanding | Fetch read/HEAD/DELETE/long-poll handler, 55 server checks including real native reader; staging snapshot through `neon dev` passes; conformance audit outstanding; controlled two-process routing and real local no-reader replay pass |
+| 4: Function handler and lifecycle             | Implemented in part; gates outstanding | Fetch read/HEAD/DELETE/long-poll handler, 64 server checks including real native reader; staging snapshot through `neon dev` passes; conformance audit outstanding; controlled two-process routing and real local no-reader replay pass |
 | 5: Object Storage                             | Implemented in part; gates outstanding | Shared memory/object index and replay tests, real S3 SDK/HTTP fixture, live staging Object Storage replay/cleanup pass; local object-backed baseline/lifecycle pass; real 15-minute TTL gate remains outstanding                        |
-| 6: replacement package/integrations           | Pending                                | Packed aliases, React and eager TanStack browser/type behavior                                                                                                                                                                          |
+| 6: replacement package/integrations           | Implemented; gate audit pending        | Fresh packed original/candidate React/TanStack builds and TS 5.5/5.9 compilation; Chrome baseline/live/auth/refetch and optimistic real tx acknowledgement pass                                                                         |
 | 7: complete API expansion                     | Pending                                | SSE, replica modes, changes-only/now, types, mobile lifecycle, broader SQL, subsets and exact MVCC/cut reconciliation                                                                                                                   |
 
 ## Upstream test disposition
@@ -162,3 +162,69 @@ An earlier real TTL run failed its pre-expiry assertion before the replication
 setup correction; its cause was not established. It is not passing evidence.
 The improved runner records response timing/status and probes the current tail
 before expiry; a fresh passing full-duration run remains required.
+
+## Packed React/TanStack and browser evidence
+
+`pnpm test:integration-packages` installs the packed candidate and original
+1.5.28 in independent projects. Identical basic/custom, React and eager TanStack
+sources compile with strict declarations on TypeScript 5.5.4 and 5.9.3, and build
+with Vite. The application and published integration packages resolve the same
+client artifact and CJS error class. Integration versions are pinned in the
+fixture generator; no workspace links or consumer pnpm patches are used.
+
+`pnpm test:browser` runs the built candidate in Chrome against local `neon dev`
+and real staging data. All four example modes pass baseline/live data, dynamic
+auth and 401 recovery using the public `FetchError`, and owner loss/refetch at the
+same proxy URL. The custom example proves a text parser and column mapper.
+TanStack's optimistic update is observed before SQL changes, then remains pending
+until its actual Postgres transaction is acknowledged through the shape stream.
+Only generated test rows are modified and removed. The browser report is in
+ignored `.artifacts/staging/browser-integrations.json`. CI runs package
+compilation/build on Node 22/24; credentialed browser runs remain local.
+
+The auth test exposed stale metadata after response normalization failed and
+native fetch retried. The transport now queues metadata only after successful
+normalization and omits bodies for HTTP statuses that forbid them. The added
+regression fails on the previous implementation and passes on the fix under
+both native and Electric-header-only forwarding. Transport coverage is now 59
+passing checks. This is not full phase 6/7 acceptance; the remaining gate audit,
+advanced capabilities and platform limitations still apply.
+
+## Baseline concurrency evidence
+
+The real staging source suite now has two passing tests. A transparent relay
+holds the baseline-end frame and all later frames while SQL commits an update to
+NULL, filter exit, primary-key change and insert in one transaction. After release,
+the adapter delivers baseline before publications; the owner emits three baseline
+chunks, and replayed rows match independent SQL. The real baseline MVCC excludes
+the later transaction, which is present in the real publication evidence. No
+source frame or provenance is synthesized for this test. This tests writes during
+delayed baseline delivery, not every possible engine snapshot-construction race.
+
+## Production handler proxy evidence
+
+The unchanged transparent, Electric query/header allowlist and trusted-predicate
+routes now also run against the actual production handler, with both memory and
+object log backends. Six scenarios prove early initialization, eager/live data,
+owner-loss refetch and the same outward path/query contract. Server checks total 64. Trusted proxies use Electric's bracketed `params[1]` syntax; the configured
+query compiler now binds that form alongside the JSON form, rejecting repeated
+positions or mixed encodings as ambiguous. No proxy route was edited to make
+these tests pass. SSE/subset proxy flows remain required when those capabilities
+are enabled.
+
+MVCC progress is also forwarded as a public `snapshot-end` control message after
+its covered changes have been installed. Controlled tests prove that ordering
+under both header profiles. The TanStack browser scenario now additionally
+commits an UPDATE that leaves the row unchanged, then resolves `awaitTxId` using
+the subsequent real source evidence. This covers an eager acknowledgement with
+no visible row change, beyond the ordinary optimistic mutation path.
+
+## Real expiry gate remains open
+
+The object-backed run started at 21:08 UTC failed at its pre-expiry HEAD probe
+at 21:22:53 UTC, ten seconds before the advertised 21:23:03 deadline. HTTP 409
+means that handle was no longer usable; the run does not pass expiry acceptance.
+The available logs do not establish whether upstream continuity, local hot reload
+or the lifetime logic removed it. Periodic HEAD probes and persistent per-instance
+boot/owner-close diagnostics have been added for the next run. Earlier successful
+unit, simulated routing and browser tests do not replace this full-duration gate.
