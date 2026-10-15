@@ -10,6 +10,14 @@ import type {
   RealtimeLogger,
 } from '@neon/realtime/client'
 
+/** A permanent backend query rejection; retrying the same shape cannot recover. */
+export class SourceQueryRejectedError extends Error {
+  constructor() {
+    super('Realtime rejected the shape query')
+    this.name = 'SourceQueryRejectedError'
+  }
+}
+
 /** Raw events from the pinned SDK's reconciled, ordered source callback. */
 export type SourceEvent = RealtimeSourceEvent
 
@@ -125,7 +133,12 @@ function checkState(
   fail: (error: Error) => void
 ): void {
   const state = subscription.getState()
-  if (state.status === 'error') fail(state.error)
+  if (state.status === 'error')
+    fail(
+      state.error.code === 'upstream_rejected' && !state.error.retryable
+        ? new SourceQueryRejectedError()
+        : state.error
+    )
   else if (state.status === 'stale' || state.status === 'closed') {
     fail(new Error(`Realtime source became ${state.status}; refetch required`))
   }

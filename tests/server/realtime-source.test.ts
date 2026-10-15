@@ -4,6 +4,7 @@ import { createRequire } from 'node:module'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
   createNeonRealtimeSource,
+  SourceQueryRejectedError,
   type SourceEvent,
   type SourceSubscription,
 } from '../../packages/server/src/realtime-source.js'
@@ -33,7 +34,7 @@ const mvcc = {
 }
 const target = { live_id: '1', epoch: '1', sequence: '1' }
 
-async function fixture() {
+async function fixture(rejectInitial = false) {
   const http = createServer()
   const ws = new WebSocketServer({ server: http })
   http.listen(0, '127.0.0.1')
@@ -70,14 +71,22 @@ async function fixture() {
   const [raw] = await once(socket, 'message')
   const request = JSON.parse(String(raw))
   expect(request.type).toBe('subscribe')
-  send({
-    type: 'subscribed',
-    request_id: request.request_id,
-    live_id: '1',
-    epoch: '1',
-    first_sequence: '1',
-    columns,
-  })
+  if (rejectInitial)
+    send({
+      type: 'subscribe_rejected',
+      request_id: request.request_id,
+      code: 'upstream_rejected',
+      message: 'private predicate literal diagnostic',
+    })
+  else
+    send({
+      type: 'subscribed',
+      request_id: request.request_id,
+      live_id: '1',
+      epoch: '1',
+      first_sequence: '1',
+      columns,
+    })
   const start = () =>
     send({
       type: 'baseline_sync_start',
@@ -135,6 +144,14 @@ async function fixture() {
 }
 
 describe('pinned patched Realtime SDK through real WebSocket delivery', () => {
+  it('classifies permanent SQL rejection without exposing upstream diagnostic text', async () => {
+    const f = await fixture(true)
+    await expect.poll(() => f.errors.length).toBe(1)
+    expect(f.errors[0]).toBeInstanceOf(SourceQueryRejectedError)
+    expect(f.errors[0].message).toBe('Realtime rejected the shape query')
+    expect(f.events).toEqual([])
+  })
+
   it('exposes early schema, raw PostgreSQL cells, MVCC and publication frontier in order', async () => {
     const f = await fixture()
     await expect.poll(() => f.events.length).toBe(1)

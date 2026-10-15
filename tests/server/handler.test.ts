@@ -3,6 +3,7 @@ import { once } from 'node:events'
 import { afterEach, describe, expect, it } from 'vitest'
 import { Shape, ShapeStream } from '../../packages/client/src/index.js'
 import { createShapeHandler } from '../../packages/server/src/handler.js'
+import { SourceQueryRejectedError } from '../../packages/server/src/realtime-source.js'
 import type {
   SourceEvent,
   SourceObserver,
@@ -303,3 +304,42 @@ describe('object replay failure boundary', () => {
     f.objectStore.getError = undefined
   })
 })
+
+describe.each(['memory', 'objects'])(
+  'permanent source rejection: %s',
+  (backend) => {
+    it('returns one safe 400 without creating a replacement owner', async () => {
+      const f = fixture(backend === 'objects')
+      const first = await f.request()
+      const handle = first.headers.get('electric-handle')!
+      f.observers[0].error(new SourceQueryRejectedError())
+      const failed = await f.request(`handle=${handle}&offset=-1`)
+      expect(failed.status).toBe(400)
+      expect(await failed.json()).toEqual({
+        error: 'Realtime rejected the shape query',
+      })
+      expect(failed.headers.has('electric-handle')).toBe(false)
+      expect(f.observers).toHaveLength(1)
+    })
+    it('closes an SSE response and returns the terminal error on its next HTTP read', async () => {
+      const f = fixture(backend === 'objects')
+      const first = await f.request()
+      const handle = first.headers.get('electric-handle')!
+      f.push({ type: 'schema', columns })
+      f.push(baseline)
+      const response = await f.request(
+        `handle=${handle}&offset=-1&live=true&live_sse=true`
+      )
+      expect(response.headers.get('content-type')).toBe('text/event-stream')
+      const reader = response.body!.getReader()
+      await reader.read()
+      f.observers[0].error(new SourceQueryRejectedError())
+      while (!(await reader.read()).done) {
+        /* drain the terminal SSE EOF */
+      }
+      const failed = await f.request(`handle=${handle}&offset=-1`)
+      expect(failed.status).toBe(400)
+      expect(f.observers).toHaveLength(1)
+    })
+  }
+)

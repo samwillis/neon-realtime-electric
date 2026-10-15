@@ -2,7 +2,10 @@ import { InvalidLogOffsetError } from './shape-log.js'
 import { ShapeDefinitionError } from './definition.js'
 import { createHash } from 'node:crypto'
 import { encodeReadProof } from '@neon/realtime-electric-protocol/read-proof'
-import type { RealtimeSource } from './realtime-source.js'
+import {
+  SourceQueryRejectedError,
+  type RealtimeSource,
+} from './realtime-source.js'
 import { ShapeOwner, type OwnerDefinition } from './shape-owner.js'
 import type { LogRead } from './shape-log.js'
 
@@ -98,6 +101,31 @@ export function createShapeHandler(options: ShapeHandlerOptions) {
       headers,
     })
   }
+  const failedOwner = (
+    owner: ShapeOwner,
+    error: unknown,
+    authorized: AuthorizedShape,
+    identity: string,
+    method: string
+  ) => {
+    // A log read may race source invalidation and throw its generic closed-log
+    // error. Retain the owner's original typed terminal cause in that case.
+    try {
+      owner.assertValid()
+    } catch (cause) {
+      error = cause
+    }
+    remove(owner.handle)
+    if (error instanceof SourceQueryRejectedError) {
+      const headers = new Headers(cors)
+      headers.set('content-type', 'application/json')
+      return new Response(
+        method === 'HEAD' ? null : JSON.stringify({ error: error.message }),
+        { status: 400, headers }
+      )
+    }
+    return refetch(authorized, identity, method)
+  }
   return {
     async fetch(request: Request): Promise<Response> {
       if (closed)
@@ -173,9 +201,8 @@ export function createShapeHandler(options: ShapeHandlerOptions) {
       const owner = entry.owner
       try {
         await owner.settled()
-      } catch {
-        remove(owner.handle)
-        return refetch(authorized, identity, request.method)
+      } catch (error) {
+        return failedOwner(owner, error, authorized, identity, request.method)
       }
       const offset = url.searchParams.get('offset') ?? '-1'
       // A new `now` request must first observe initialization and the real
@@ -202,8 +229,7 @@ export function createShapeHandler(options: ShapeHandlerOptions) {
         request.signal.throwIfAborted()
         if (!(error instanceof InvalidLogOffsetError)) {
           owner.close(error instanceof Error ? error : new Error(String(error)))
-          remove(owner.handle)
-          return refetch(authorized, identity, request.method)
+          return failedOwner(owner, error, authorized, identity, request.method)
         }
         return Response.json(
           { error: 'Invalid shape offset' },
@@ -226,9 +252,8 @@ export function createShapeHandler(options: ShapeHandlerOptions) {
         )
         try {
           await owner.settled()
-        } catch {
-          remove(owner.handle)
-          return refetch(authorized, identity, request.method)
+        } catch (error) {
+          return failedOwner(owner, error, authorized, identity, request.method)
         }
         try {
           read = await owner.log.read(
@@ -239,15 +264,13 @@ export function createShapeHandler(options: ShapeHandlerOptions) {
         } catch (error) {
           request.signal.throwIfAborted()
           owner.close(error instanceof Error ? error : new Error(String(error)))
-          remove(owner.handle)
-          return refetch(authorized, identity, request.method)
+          return failedOwner(owner, error, authorized, identity, request.method)
         }
       }
       try {
         owner.assertValid()
-      } catch {
-        remove(owner.handle)
-        return refetch(authorized, identity, request.method)
+      } catch (error) {
+        return failedOwner(owner, error, authorized, identity, request.method)
       }
       const end = request.method === 'HEAD' ? owner.log.head : read.end
       const headers = new Headers({
@@ -347,7 +370,8 @@ export function createShapeHandler(options: ShapeHandlerOptions) {
                   owner.close(
                     error instanceof Error ? error : new Error(String(error))
                   )
-                  remove(owner.handle)
+                  if (!(error instanceof SourceQueryRejectedError))
+                    remove(owner.handle)
                   // A complete EOF sends the native reader back through HTTP,
                   // where the invalidated handle receives an explicit refetch.
                   controller.close()

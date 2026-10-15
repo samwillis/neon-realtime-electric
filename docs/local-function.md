@@ -47,11 +47,12 @@ ensure tests run the new bundle. Restarting kills owner state, so do it before
 starting an expiry/lifecycle acceptance run.
 
 The handler's initial profile supports GET/optional HEAD/DELETE, JSON catch-up and
-long polling, configured primary-keyed tables, projections and a bounded filter
-grammar (scalar comparisons/IS NULL joined with AND). Identifiers are resolved
-against the allowlist and operands are bound parameters. Unsupported options fail
-explicitly. SSE, both replica modes, changes-only and now offsets are supported;
-advanced SQL and subsets remain later gates.
+long polling, configured primary-keyed tables and projections. WHERE text passes
+through to Realtime with values supplied separately as positional parameters;
+Realtime validates SQL. Root/projection identifiers still use the table allowlist,
+and the application authorizes predicates. SSE, both replica modes, changes-only
+and now offsets are supported. See [WHERE evidence](./where-queries.md) for tested
+subquery behavior; subsets remain a later gate.
 
 For Object Storage mode, load `.env.storage.local` alongside `.env.local` and set
 `NEON_SHAPE_LOG_BUCKET=your-private-shape-log-bucket`. `NEON_SHAPE_SEAL_BYTES=1` forces small

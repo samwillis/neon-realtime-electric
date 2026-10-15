@@ -1,5 +1,7 @@
 # Project working context
 
+- Use `Sam Willis <sam.willis@gmail.com>` as both author and committer. Run validation and the private-configuration audit before committing, then push each commit to `origin` immediately after creating it.
+
 - Use Sam's Neon staging workspace for real Postgres and Realtime integration tests.
 - Run the Function locally with `neon dev`. Request affinity is not available on the platform yet; do not deploy the Function for shape/affinity testing at this stage.
 - Test single-owner behavior locally and simulate routing, owner loss and expiry. Keep actual platform affinity, idle/eviction and `waitUntil` verification deferred until the required platform support exists. Local success does not prove these platform guarantees.

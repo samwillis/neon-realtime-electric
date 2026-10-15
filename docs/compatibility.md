@@ -9,8 +9,8 @@ local/staging test target, as agreed in `AGENTS.md`.
 | 0: pristine import and compatibility baseline | Passed                                 | 80-file pinned import; 78 unchanged-file checks; build/typecheck; 553 runtime/declaration checks; identical packed consumers on TS 5.5.4/5.9.3; 62 exports across four declaration entry points                                         |
 | 1: internal transport boundary                | Passed                                 | HTTP adapter extracted; all 553 baseline checks, build/typecheck, packed consumers and 62-export declaration comparison pass                                                                                                            |
 | 2: real Durable Streams delivery              | Implemented; final gate audit pending  | Real reader/reference server; 59 native/protocol tests, 18 packed proxy tests, consumer/lifecycle conformance and clean patch install; early real staging/Function no-reader lifecycle now passes                                       |
-| 3: real staging Realtime                      | Implemented in part; live gate passed  | Pinned SDK evidence patch, source adapter, serialized owner and bounded query compiler; real baseline/live publications and transaction evidence pass after enabling logical replication; see docs/staging-publication-investigation.md |
-| 4: Function handler and lifecycle             | Implemented in part; gates outstanding | Fetch read/HEAD/DELETE/long-poll/SSE handler, 81 server checks including real native reader; staging snapshot through `neon dev` passes; conformance audit outstanding; controlled two-process routing and real local no-reader replay pass |
+| 3: real staging Realtime                      | Implemented in part; live gate passed  | Pinned SDK evidence patch, source adapter, serialized owner and WHERE passthrough; real baseline/live publications and transaction evidence pass after enabling logical replication; see docs/staging-publication-investigation.md |
+| 4: Function handler and lifecycle             | Implemented in part; gates outstanding | Fetch read/HEAD/DELETE/long-poll/SSE handler, 96 server checks including real native reader; staging snapshot through `neon dev` passes; conformance audit outstanding; controlled two-process routing and real local no-reader replay pass |
 | 5: Object Storage                             | Implemented in part; gates outstanding | Shared memory/object index and replay tests, real S3 SDK/HTTP fixture, live staging Object Storage replay/cleanup pass; local object-backed baseline/lifecycle pass; real local 15-minute expiry/refetch run passes                        |
 | 6: replacement package/integrations           | Implemented; gate audit pending        | Fresh packed original/candidate React/TanStack builds and TS 5.5/5.9 compilation; Chrome baseline/live/auth/refetch and optimistic real tx acknowledgement pass                                                                         |
 | 7: complete API expansion                     | Implemented in part                                | SSE, replica modes and changes-only/now implemented; full types/mobile lifecycle, broader SQL, subsets and exact MVCC/cut reconciliation remain                                                                                                                   |
@@ -253,10 +253,12 @@ current service-free server suite has 81 passing checks; transport checks remain
 59. Typecheck, pristine-file checks, public API comparison and packed integration
 compilation/build pass after these changes.
 
-Broader WHERE support remains pending: pass supported expressions and bound
-parameters through to Realtime after parser/structured-API validation, preserving
-authorization. Referenced-table-only changes, concurrent writes and independent
-Postgres comparisons at a synchronization boundary are required gates. The
-current bounded comparison/AND compiler remains the implemented query profile.
-Subsets, full type/mobile behavior and the remaining conformance/performance
-gates still prevent claiming full phase 7 or complete API compatibility.
+WHERE expressions and positional parameters now pass directly to Realtime; no
+PostgreSQL parser or local expression evaluator is installed. Four real query
+scenarios cover OR/IN, IN, EXISTS and NOT EXISTS with dependency-only changes and
+overlapping transactions. Realtime resets these subscriptions after writes, so
+the real client refetches through the same authorized URL and verifies its new
+baseline against SQL after an installed MVCC boundary. This proves convergence
+through refetch, not incremental Electric tags/move metadata. See
+[WHERE queries](./where-queries.md). Subsets, full type/mobile behavior and the
+remaining conformance/performance gates still prevent full phase 7 acceptance.

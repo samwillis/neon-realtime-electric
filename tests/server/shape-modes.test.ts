@@ -47,17 +47,16 @@ function sourceFixture() {
   return { source, observers }
 }
 function definition(params = '') {
-  return resolveConfiguredShape(
-    new URL(`http://local/shape?table=items&${params}`),
-    [
-      {
-        namespace: 'public',
-        table: 'items',
-        primaryKey: ['id'],
-        columns: schema,
-      },
-    ]
-  )
+  const url = new URL(`http://local/shape?${params}`)
+  if (!url.searchParams.has('table')) url.searchParams.set('table', 'items')
+  return resolveConfiguredShape(url, [
+    {
+      namespace: 'public',
+      table: 'items',
+      primaryKey: ['id'],
+      columns: schema,
+    },
+  ])
 }
 describe('replica and changes-only boundaries', () => {
   it.each(['default', 'full'] as const)(
