@@ -26,6 +26,41 @@ const quote = (name: string) => `"${name.replaceAll('"', '""')}"`
 // types additionally compare against Postgres ::text from a separate query.
 const allCases = [
   {
+    name: 'ints2',
+    sqlType: 'bigint[][]',
+    type: 'int8',
+    dims: 2,
+    sql: "'{{1,2,3},{4,5,6}}'",
+    value: [
+      [1n, 2n, 3n],
+      [4n, 5n, 6n],
+    ],
+    updatedSql: "'{{4,5,6},{7,8,9}}'",
+    updatedValue: [
+      [4n, 5n, 6n],
+      [7n, 8n, 9n],
+    ],
+  },
+  {
+    name: 'doubles',
+    sqlType: 'double precision[]',
+    type: 'float8',
+    dims: 1,
+    sql: "'{Infinity,-Infinity,NaN}'",
+    value: [Infinity, -Infinity, NaN],
+    updatedSql: "'{Infinity,NaN,-Infinity}'",
+    updatedValue: [Infinity, NaN, -Infinity],
+  },
+  {
+    name: 'value',
+    sqlType: 'jsonb',
+    type: 'jsonb',
+    sql: `'{"a":5,"b":[{"c":"foo"}]}'`,
+    value: { a: 5, b: [{ c: 'foo' }] },
+    updatedSql: `'{"a":6}'`,
+    updatedValue: { a: 6 },
+  },
+  {
     name: 'enum_array',
     sqlType: 'custom_mood[]',
     qualified: true,
@@ -291,6 +326,9 @@ const allCases = [
 ]
 
 const incrementalNames = new Set([
+  'ints2',
+  'doubles',
+  'value',
   'enum_array',
   'enum_matrix',
   'domain_array',
@@ -538,7 +576,7 @@ for (const profile of ['incremental', 'extended'] as const) {
             )
           ).rows[0].txid as string
           await check(
-            'custom arrays to different values',
+            'structured values to different values',
             [
               { id: 1, ...nulls },
               { id: 2, ...updatedGolden },

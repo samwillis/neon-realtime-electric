@@ -17,14 +17,18 @@ function deferred<T>() {
   })
   return { promise, resolve }
 }
-function fixture(objects: boolean, electricOnly: boolean) {
+function fixture(
+  objects: boolean,
+  electricOnly: boolean,
+  connectionMs = 5_000
+) {
   const observers: SourceObserver[] = []
   const requests: Request[] = []
   const store = new FixtureObjectStore()
   let txid = 10
   const handler = createShapeHandler({
-    longPollMs: 5_000,
-    sseConnectionMs: 5_000,
+    longPollMs: connectionMs,
+    sseConnectionMs: connectionMs,
     source: {
       async subscribe(_, observer) {
         observers.push(observer)
@@ -253,6 +257,115 @@ for (const objects of [false, true])
             repaired.resolve()
             abort.abort()
             await refresh?.catch(() => {})
+            stream.unsubscribeAll()
+            f.handler.close()
+            await f.handler.drain()
+          }
+        })
+
+        it.each(['network', 'fetch-error', 'http-500', 'http-429'] as const)(
+          'disconnects during native %s backoff and resumes the same history without the public error handler',
+          async (failure) => {
+            const f = fixture(objects, electricOnly, 100)
+            const abort = new AbortController()
+            const failed = deferred<void>()
+            const errors: Error[] = []
+            let failing = false
+            let failedAttempts = 0
+            const stream = new ShapeStream<{ id: number; label: string }>({
+              url: 'http://local/application/shapes',
+              liveSse,
+              signal: abort.signal,
+              backoffOptions: {
+                initialDelay: 1,
+                maxDelay: 5,
+                multiplier: 1,
+                onFailedAttempt() {
+                  failedAttempts++
+                  failed.resolve()
+                },
+              },
+              fetchClient: async (input, init) => {
+                if (failing) {
+                  if (failure === 'network') throw new TypeError('Offline')
+                  if (failure === 'fetch-error')
+                    throw new FetchError(
+                      500,
+                      'Transient custom fetch failure',
+                      undefined,
+                      {},
+                      String(input)
+                    )
+                  return new Response('Transient failure', {
+                    status: failure === 'http-500' ? 500 : 429,
+                  })
+                }
+                return f.fetchClient(input, init)
+              },
+              onError(error) {
+                errors.push(error)
+              },
+            })
+            const shape = new Shape(stream)
+            try {
+              expect(await shape.rows).toEqual([{ id: 1, label: 'initial' }])
+              expect(stream.isConnected()).toBe(true)
+              const handle = stream.shapeHandle
+              // Let the ongoing poll/SSE connection complete naturally. A forced
+              // refresh would itself disconnect and could mask a broken failure hook.
+              failing = true
+              await failed.promise
+              expect(stream.isConnected()).toBe(false)
+              expect(stream.error).toBeNull()
+              f.publish('queued during backoff')
+              failing = false
+              await expect
+                .poll(() => shape.currentRows)
+                .toEqual([{ id: 1, label: 'queued during backoff' }])
+              expect(stream.isConnected()).toBe(true)
+              expect(stream.error).toBeNull()
+              expect(failedAttempts).toBeGreaterThan(0)
+              expect(errors).toEqual([])
+              expect(stream.shapeHandle).toBe(handle)
+              expect(f.observers).toHaveLength(1)
+            } finally {
+              abort.abort()
+              stream.unsubscribeAll()
+              f.handler.close()
+              await f.handler.drain()
+            }
+          }
+        )
+
+        it('advances lastSyncedAt on unchanged live tails without rotating or publishing row changes', async () => {
+          const f = fixture(objects, electricOnly, 100)
+          const abort = new AbortController()
+          const stream = new ShapeStream({
+            url: 'http://local/application/shapes',
+            liveSse,
+            signal: abort.signal,
+            fetchClient: f.fetchClient,
+          })
+          const shape = new Shape(stream)
+          let changes = 0
+          stream.subscribe((messages) => {
+            changes += messages.filter(isChangeMessage).length
+          })
+          try {
+            await shape.rows
+            const handle = stream.shapeHandle
+            const offset = stream.lastOffset
+            const synced = stream.lastSyncedAt()!
+            const before = changes
+            await expect.poll(() => stream.lastSyncedAt()! > synced).toBe(true)
+            expect(stream.isConnected()).toBe(true)
+            expect(stream.lastOffset).toBe(offset)
+            expect(stream.shapeHandle).toBe(handle)
+            expect(changes).toBe(before)
+            expect(shape.currentRows).toEqual([{ id: 1, label: 'initial' }])
+            expect(f.observers).toHaveLength(1)
+          } finally {
+            abort.abort()
             stream.unsubscribeAll()
             f.handler.close()
             await f.handler.drain()

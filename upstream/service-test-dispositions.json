@@ -29,7 +29,7 @@
     },
     "status_live_errors": {
       "status": "mapped",
-      "scope": "Disconnect during an already-live auth error and same-history resumption after asynchronous repair.",
+      "scope": "Live auth repair and native network/custom FetchError/500/429 backoff disconnected/reconnected states; unchanged polling/SSE tails advance lastSyncedAt without row changes.",
       "evidence": ["tests/server/client-lifecycle.test.ts"],
       "remaining": ""
     },

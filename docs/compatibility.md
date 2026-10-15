@@ -10,7 +10,7 @@ local/staging test target, as agreed in `AGENTS.md`.
 | 1: internal transport boundary                | Passed                                 | HTTP adapter extracted; all 553 baseline checks, build/typecheck, packed consumers and 62-export declaration comparison pass                                                                                                            |
 | 2: real Durable Streams delivery              | Implemented; final gate audit pending  | Real reader/reference server; 59 native/protocol tests, 18 packed proxy tests, consumer/lifecycle conformance and clean patch install; early real staging/Function no-reader lifecycle now passes                                       |
 | 3: real staging Realtime                      | Implemented in part; live gate passed  | Pinned SDK evidence patch, source adapter, serialized owner and WHERE passthrough; real baseline/live publications and transaction evidence pass after enabling logical replication; see docs/staging-publication-investigation.md |
-| 4: Function handler and lifecycle             | Implemented in part; gates outstanding | Fetch read/HEAD/DELETE/long-poll/SSE handler, 216 server checks; selected native JSON read/store conformance passes; staging snapshot/lifecycle through `neon dev` and controlled owner routing pass; final gate audit outstanding |
+| 4: Function handler and lifecycle             | Implemented in part; gates outstanding | Fetch read/HEAD/DELETE/long-poll/SSE handler, 256 server checks; selected native JSON read/store conformance passes; staging snapshot/lifecycle through `neon dev` and controlled owner routing pass; final gate audit outstanding |
 | 5: Object Storage                             | Implemented in part; gates outstanding | Shared memory/object index and replay tests, real S3 SDK/HTTP fixture, live staging Object Storage replay/cleanup pass; local object-backed baseline/lifecycle pass; real local 15-minute expiry/refetch run passes                        |
 | 6: replacement package/integrations           | Implemented; gate audit pending        | Fresh packed original/candidate React/TanStack builds and TS 5.5/5.9 compilation; Chrome baseline/live/auth/refetch and optimistic real tx acknowledgement pass                                                                         |
 | 7: complete API expansion                     | Implemented in part                                | SSE, replica modes, changes-only/now, WHERE passthrough, expanded real type matrix and native-reader mobile lifecycle gates implemented; complete types/events, subsets and exact MVCC/cut reconciliation remain                                                                                                                   |
@@ -288,8 +288,8 @@ background/foreground and reason-less abort recovery preserve the handle when
 continuity exists, and refetch after owner loss. These are simulated runtime
 tests, not device execution.
 
-Eight real type scenarios check 43 columns across polling/SSE and both replica
-modes. A strict 42-column profile proves actual incremental updates and full
+Eight real type scenarios check 46 columns across polling/SSE and both replica
+modes. A strict 45-column profile proves actual incremental updates and full
 replica old values. The extended profile preserves values through refetch but
 currently receives backend `upstream_cancelled` after writes; it does not pass
 full incremental event compatibility. See [type and runtime evidence](./type-and-mobile-evidence.md)
@@ -440,13 +440,13 @@ request affinity or extend the remaining type, dependency and subset gates.
 
 ## Broader type and generated-history gates
 
-The strict type profile now covers 42 columns, including the original enum,
+The strict type profile now covers 45 columns, including the original enum,
 multidimensional enum, domain and composite array cases. It checks baseline,
 both NULL transitions, changed array values and deletion, with one handle and
 baseline epoch at every barrier. Default/full replica and polling/SSE all run
 through a separate Function started with `neon dev`. Full-replica old values
 are checked for both NULL restoration and the subsequent changed arrays. The
-43-column full projection remains a separate convergence profile; full event
+46-column full projection remains a separate convergence profile; full event
 compatibility remains open. See [type evidence](./type-and-mobile-evidence.md).
 
 Four server property checks each execute the same 50 generated histories using an independent
@@ -459,4 +459,24 @@ sequence epoch and baseline; cleanup removes all fixture objects. The fixed seed
 is recorded in `tests/server/owner-model.test.ts`; fast-check reports the seed and
 shrink path on failure. These are controlled owner/log/protocol checks, separate
 from real backend and native-reader/browser evidence. The server suite totals
-216 tests. Subset interleavings remain dependent on the upstream cut contract.
+256 tests. Subset interleavings remain dependent on the upstream cut contract.
+
+
+## Remaining historical status and parser assertions
+
+Forty further native lifecycle checks verify status during network errors,
+custom FetchError throws, HTTP 500 and HTTP 429. The active poll/SSE connection
+ends naturally before the failure; the tests do not force refresh, which could
+mask the disconnected-state assertion. The existing native retry hook sets the
+public connection state to false, invokes the configured failed-attempt callback,
+and recovers at the same handle without calling the terminal public error handler.
+Unchanged live tails also advance lastSyncedAt without row changes or offset
+advancement. Every case runs across both stores, header profiles and live modes.
+No production change was needed. The server suite has 256 checks.
+
+The strict type profile includes bigint[][] matrices, float8[] NaN/infinities
+and nested JSON in a column named value from the original parser assertions.
+They pass baseline, both NULL transitions, changed values and old-value checks
+through the local Function in both replica/live modes. This closes those
+specific evidence gaps; the full type/event, dependency and subset gates remain
+open, as recorded in the capability matrix.

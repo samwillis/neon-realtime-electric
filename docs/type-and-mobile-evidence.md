@@ -8,17 +8,17 @@ Durable Streams reader. They expand phase 7 coverage; they do not complete it.
 `tests/integration/type-matrix.test.ts` has eight credentialed scenarios: two
 projection profiles, polling/SSE, and default/full replica. Each creates an
 isolated schema, checks a populated and a NULL row, changes values to NULL,
-restores values from NULL, changes custom arrays to different values, and deletes a row. Every comparison waits for an
+restores values from NULL, changes structured values to different values, and deletes a row. Every comparison waits for an
 installed MVCC snapshot covering the write; writers are quiescent during the
 independent SQL comparison.
 
-| Profile                                  | Coverage                                                                                                                                                                                                                                                                                                                                                                                           | Observed delivery                                                                                                                 |
-| ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| Incremental, 42 columns                  | int2/int4/int8, bool, float4/float8, NaN/infinities, exact numeric, quoted/Unicode text, varchar/bpchar, UUID, JSON/JSONB, bytea; integer/bigint/text/bool/JSON arrays, empty and multidimensional arrays, NULL elements; date/infinity, timestamp/timestamptz, time/timetz, interval, inet/cidr/macaddr, bit/varbit, int4range and point; enum/multidimensional enum, domain and composite arrays | One baseline epoch, actual update/update/update/delete messages; full replica old values checked                                  |
-| Extended, 43 columns including the above | date/infinity, timestamp/timestamptz, time/timetz, interval, inet/cidr/macaddr, bit/varbit, int4range, point and XML                                                                                                                                                                                                                                                                               | Correct materialized values through replacement baselines; four `upstream_cancelled` events and five baseline epochs per scenario |
+| Profile                                  | Coverage                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | Observed delivery                                                                                                                 |
+| ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| Incremental, 45 columns                  | int2/int4/int8, bool, float4/float8, NaN/infinities, exact numeric, quoted/Unicode text, varchar/bpchar, UUID, JSON/JSONB, bytea; integer/bigint/text/bool/JSON arrays, empty and multidimensional arrays, NULL elements; date/infinity, timestamp/timestamptz, time/timetz, interval, inet/cidr/macaddr, bit/varbit, int4range and point; enum/multidimensional enum, domain and composite arrays; bigint matrices, float8 arrays with NaN/infinities, and nested JSON in a column named value | One baseline epoch, actual update/update/update/delete messages; full replica old values checked                                  |
+| Extended, 46 columns including the above | date/infinity, timestamp/timestamptz, time/timetz, interval, inet/cidr/macaddr, bit/varbit, int4range, point and XML                                                                                                                                                                                                                                                                                                                                                                            | Correct materialized values through replacement baselines; four `upstream_cancelled` events and five baseline epochs per scenario |
 
 The extended projection currently does not pass incremental event compatibility.
-The strict profile now covers 42 columns, preserving one handle and baseline
+The strict profile now covers 45 columns, preserving one handle and baseline
 epoch at every baseline/write/delete barrier. Its evidence includes real ordered
 publications and old values in both directions of the NULL transition. The
 remaining full-profile event gate still requires a backend change and strict rerun.
@@ -36,7 +36,9 @@ All eight type scenarios now start the production Fetch handler in a separate
 Function process with `neon dev`, using an isolated configured-table allowlist.
 The runner records original Realtime frames through a transparent local relay,
 without altering server frames. Configured origin/path and GET methods are
-asserted, and strict-profile handles remain stable after every write. Teardown
+asserted, and strict-profile handles remain stable after every write. Original bigint matrix,
+non-finite float array and nested JSON value-column vectors are checked both
+before and after updates, including full-replica old values. Teardown
 stops the Function and drops its isolated schema. This is local Function evidence;
 it does not establish deployed affinity, device runtimes, every PostgreSQL
 extension/domain, custom parser or array edge case.
