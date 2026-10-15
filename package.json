@@ -31,7 +31,8 @@
     "test:local-lifecycle": "node --env-file=.env.local --import tsx scripts/test-local-lifecycle.ts",
     "test:integration-packages": "pnpm build && node scripts/test-integration-packages.mjs",
     "test:browser": "node --env-file=.env.local scripts/test-browser-integrations.mjs",
-    "test:local-modes": "node --env-file=.env.local --import tsx scripts/test-local-modes.ts"
+    "test:local-modes": "node --env-file=.env.local --import tsx scripts/test-local-modes.ts",
+    "test:local-performance": "pnpm build && node --env-file=.env.local scripts/test-local-performance.mjs"
   },
   "devDependencies": {
     "@durable-streams/client": "0.2.7",

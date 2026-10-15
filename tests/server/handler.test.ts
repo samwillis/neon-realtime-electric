@@ -102,6 +102,39 @@ describe.each(['memory', 'objects'])(
   'Function-compatible shape read handler: %s',
   (backend) => {
     const createFixture = () => fixture(backend === 'objects')
+    it('reports captured in-process row/log counts without exposing source values', async () => {
+      const f = createFixture()
+      const first = await f.request('offset=-1')
+      const handle = first.headers.get('electric-handle')!
+      f.push({ type: 'schema', columns })
+      f.push(baseline)
+      await f.request(`handle=${handle}&offset=-1`)
+      if (backend === 'objects') await f.logs[0].flush()
+      const before = f.handler.diagnostics[0]
+      expect(before.retainedRows).toBe(1)
+      expect(before.baselineComplete).toBe(true)
+      expect(before.afterSeq).toBe('3')
+      expect(JSON.stringify(before)).not.toContain('initial')
+      if (backend === 'objects') {
+        expect(before.residentLogBytes).toBe(0)
+        expect(before.sealedRanges).toBeGreaterThan(0)
+      }
+      f.push({
+        type: 'publication',
+        changes: [{ op: 'remove', row_key: 'a'.repeat(64) }],
+        txids: ['11'],
+        frontier: { lsn: '0/20' },
+      })
+      await f.request(`handle=${handle}&offset=-1`)
+      expect(f.handler.diagnostics[0].retainedRows).toBe(0)
+      expect(f.handler.diagnostics[0].afterSeq).toBe('4')
+      // A previously returned metrics object remains a captured observation.
+      expect(before.retainedRows).toBe(1)
+      await f.request(`handle=${handle}`, 'DELETE')
+      await f.handler.drain()
+      expect(f.handler.pendingObjectCleanups).toBe(0)
+      expect(f.handler.diagnostics).toEqual([])
+    })
     it('returns an early handle on the same URL and truthful start-boundary proofs across split reads', async () => {
       const f = createFixture()
       const first = await f.request('offset=-1')

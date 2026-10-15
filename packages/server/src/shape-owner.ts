@@ -105,6 +105,11 @@ export class ShapeOwner {
     return this.#columns ? this.definition.schema : undefined
   }
 
+  /** Diagnostic count only; retained source rows remain private to the owner. */
+  get retainedRowCount(): number {
+    return this.#rows.size
+  }
+
   assertValid(): void {
     if (this.#now() >= this.expiresAt) this.close(new Error('Shape expired'))
     if (this.#error) throw this.#error

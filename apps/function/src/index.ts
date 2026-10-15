@@ -16,7 +16,11 @@ function diagnose(entry: Record<string, unknown>) {
   if (process.env.NEON_SHAPE_DIAGNOSTICS_FILE)
     appendFileSync(process.env.NEON_SHAPE_DIAGNOSTICS_FILE, line + '\n')
 }
-diagnose({ event: 'function_started', timestamp: Date.now() })
+diagnose({
+  event: 'function_started',
+  timestamp: Date.now(),
+  nodeVersion: process.version,
+})
 
 function required(name: string): string {
   const value = process.env[name]
@@ -39,6 +43,55 @@ const storage = process.env.NEON_SHAPE_LOG_BUCKET
   ? createS3LogStore({ bucket: process.env.NEON_SHAPE_LOG_BUCKET })
   : undefined
 const objectPrefix = 'electric-shapes'
+// Opt-in local measurements. Values and object keys never enter diagnostics.
+const measuredStore =
+  storage && process.env.NEON_SHAPE_DIAGNOSTICS === 'true'
+    ? {
+        async put(...args: Parameters<typeof storage.put>) {
+          const started = performance.now()
+          try {
+            await storage.put(...args)
+            diagnose({
+              event: 'object_put',
+              bytes: args[1].byteLength,
+              elapsedMs: performance.now() - started,
+              timestamp: Date.now(),
+            })
+          } catch (error) {
+            diagnose({
+              event: 'object_put_failed',
+              aborted: args[2]?.aborted === true,
+              timestamp: Date.now(),
+            })
+            throw error
+          }
+        },
+        async get(...args: Parameters<typeof storage.get>) {
+          const started = performance.now()
+          try {
+            const bytes = await storage.get(...args)
+            diagnose({
+              event: 'object_get',
+              bytes: bytes.byteLength,
+              elapsedMs: performance.now() - started,
+              timestamp: Date.now(),
+            })
+            return bytes
+          } catch (error) {
+            diagnose({
+              event: 'object_get_failed',
+              aborted: args[1]?.aborted === true,
+              timestamp: Date.now(),
+            })
+            throw error
+          }
+        },
+        async delete(...args: Parameters<typeof storage.delete>) {
+          await storage.delete(...args)
+          diagnose({ event: 'object_delete', timestamp: Date.now() })
+        },
+      }
+    : storage
 const sweep = () =>
   storage
     ?.sweepExpired(objectPrefix)
@@ -51,7 +104,7 @@ const handler = createShapeHandler({
   createLog: storage
     ? ({ handle, expiresAt }) =>
         new ObjectShapeLog({
-          store: storage,
+          store: measuredStore!,
           prefix: `${objectPrefix}/${expiresAt}/${handle}`,
           sealBytes: process.env.NEON_SHAPE_SEAL_BYTES
             ? Number(process.env.NEON_SHAPE_SEAL_BYTES)
@@ -86,8 +139,24 @@ const handler = createShapeHandler({
     }
   },
 })
+const metricsTimer =
+  process.env.NEON_SHAPE_DIAGNOSTICS === 'true'
+    ? setInterval(
+        () =>
+          diagnose({
+            event: 'function_metrics',
+            timestamp: Date.now(),
+            memory: process.memoryUsage(),
+            shapes: handler.diagnostics,
+            pendingObjectCleanups: handler.pendingObjectCleanups,
+          }),
+        100
+      )
+    : undefined
+metricsTimer?.unref()
 const stop = () => {
   clearInterval(sweepTimer)
+  clearInterval(metricsTimer)
   handler.close()
   void handler
     .drain()

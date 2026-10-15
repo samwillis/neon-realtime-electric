@@ -57,8 +57,10 @@ subquery behavior; subsets remain a later gate.
 For Object Storage mode, load `.env.storage.local` alongside `.env.local` and set
 `NEON_SHAPE_LOG_BUCKET=your-private-shape-log-bucket`. `NEON_SHAPE_SEAL_BYTES=1` forces small
 sealed objects for acceptance tests; omit it for the normal 256 KiB threshold.
-`NEON_SHAPE_DIAGNOSTICS=true` logs event names and owner closure reasons without
-credentials. The local process sweeps expired prefixes at startup and every
+`NEON_SHAPE_DIAGNOSTICS=true` logs event names, owner closure reasons, 100 ms
+process memory/row/log samples and object operation sizes/durations without
+credentials, object keys or row values. These diagnostics are in-process only;
+there is no diagnostics HTTP endpoint. The local process sweeps expired prefixes at startup and every
 minute; this is not a platform background-execution guarantee.
 
 To investigate full-duration failures, optionally set
@@ -69,3 +71,6 @@ The expiry runner checks optional HEAD liveness every 30 seconds and saves both 
 latest report and a per-run report. These probes are test instrumentation; normal
 application/proxy flows still require GET only. Finish code/build changes before
 starting the acceptance run to avoid mixing hot reload with expiry behavior.
+
+See [local performance](./local-performance.md) for the measured size/fan-out
+profile, limitations and the `test:local-performance` workflow with real storage.

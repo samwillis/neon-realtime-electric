@@ -280,3 +280,15 @@ full incremental event compatibility. See [type and runtime evidence](./type-and
 for the precise matrix, synchronization boundaries and remaining limitations.
 Subsets, complete type/event equivalence, native server conformance, local
 performance and the comprehensive phase exit audit remain open.
+
+## Local performance gate
+
+The opt-in local benchmark passed eight scenarios with real Postgres/Realtime
+and Object Storage: 1,000/5,000 rows, one/five readers, polling/SSE, eight writes
+per scenario, stored-object fan-out, delta replay and owner-loss refetch. It
+checks exact rows, actual transaction acknowledgements and completed cleanup.
+See [local performance evidence](./local-performance.md) for measurements and
+their limits. The server suite passes 114 checks; transport checks remain 59.
+The local performance gate passes for this measured profile. Subsets, complete
+type/event equivalence, native server conformance and the comprehensive phase
+exit audit still prevent full phase 7 acceptance.

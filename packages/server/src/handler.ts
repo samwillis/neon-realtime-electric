@@ -7,6 +7,7 @@ import {
   type RealtimeSource,
 } from './realtime-source.js'
 import { ShapeOwner, type OwnerDefinition } from './shape-owner.js'
+import { ObjectShapeLog } from './object-log.js'
 import type { LogRead } from './shape-log.js'
 
 export interface AuthorizedShape {
@@ -403,6 +404,24 @@ export function createShapeHandler(options: ShapeHandlerOptions) {
     },
     get activeShapes() {
       return owners.size
+    },
+    get pendingObjectCleanups() {
+      return pendingCleanup.size
+    },
+    /** In-process diagnostics for the local harness; never served over HTTP. */
+    get diagnostics() {
+      return [...owners.values()].map(({ owner }) => ({
+        handle: owner.handle,
+        expiresAt: owner.expiresAt,
+        retainedRows: owner.retainedRowCount,
+        ...owner.log.head,
+        ...(owner.log instanceof ObjectShapeLog
+          ? {
+              residentLogBytes: owner.log.residentBytes,
+              sealedRanges: owner.log.sealedRanges,
+            }
+          : {}),
+      }))
     },
   }
 }
