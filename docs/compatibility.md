@@ -10,10 +10,10 @@ local/staging test target, as agreed in `AGENTS.md`.
 | 1: internal transport boundary                | Passed                                 | HTTP adapter extracted; all 553 baseline checks, build/typecheck, packed consumers and 62-export declaration comparison pass                                                                                                            |
 | 2: real Durable Streams delivery              | Implemented; final gate audit pending  | Real reader/reference server; 59 native/protocol tests, 18 packed proxy tests, consumer/lifecycle conformance and clean patch install; early real staging/Function no-reader lifecycle now passes                                       |
 | 3: real staging Realtime                      | Implemented in part; live gate passed  | Pinned SDK evidence patch, source adapter, serialized owner and WHERE passthrough; real baseline/live publications and transaction evidence pass after enabling logical replication; see docs/staging-publication-investigation.md |
-| 4: Function handler and lifecycle             | Implemented in part; gates outstanding | Fetch read/HEAD/DELETE/long-poll/SSE handler, 96 server checks including real native reader; staging snapshot through `neon dev` passes; conformance audit outstanding; controlled two-process routing and real local no-reader replay pass |
+| 4: Function handler and lifecycle             | Implemented in part; gates outstanding | Fetch read/HEAD/DELETE/long-poll/SSE handler, 112 server checks including real native reader; staging snapshot through `neon dev` passes; conformance audit outstanding; controlled two-process routing and real local no-reader replay pass |
 | 5: Object Storage                             | Implemented in part; gates outstanding | Shared memory/object index and replay tests, real S3 SDK/HTTP fixture, live staging Object Storage replay/cleanup pass; local object-backed baseline/lifecycle pass; real local 15-minute expiry/refetch run passes                        |
 | 6: replacement package/integrations           | Implemented; gate audit pending        | Fresh packed original/candidate React/TanStack builds and TS 5.5/5.9 compilation; Chrome baseline/live/auth/refetch and optimistic real tx acknowledgement pass                                                                         |
-| 7: complete API expansion                     | Implemented in part                                | SSE, replica modes and changes-only/now implemented; full types/mobile lifecycle, broader SQL, subsets and exact MVCC/cut reconciliation remain                                                                                                                   |
+| 7: complete API expansion                     | Implemented in part                                | SSE, replica modes, changes-only/now, WHERE passthrough, expanded real type matrix and native-reader mobile lifecycle gates implemented; complete types/events, subsets and exact MVCC/cut reconciliation remain                                                                                                                   |
 
 ## Upstream test disposition
 
@@ -54,8 +54,8 @@ Verified locally on Node 22.23.2 and pnpm 10.30.3:
 
 Generated evidence is in `.artifacts/public-api.json` and
 `.artifacts/package-compatibility/report.json`. The committed scripts regenerate
-it; `.github/workflows/compatibility.yml` defines Node 22/24 CI checks. CI itself
-has not run remotely. The original service-dependent suites are retained but
+it; `.github/workflows/compatibility.yml` defines Node 22/24 CI checks. The first published sanitized revision also passed remote Compatibility CI.
+Local evidence for later revisions is recorded separately below. The original service-dependent suites are retained but
 have not been run against a real Electric service; their disposition above stays
 explicit rather than being counted as passed.
 
@@ -116,9 +116,9 @@ is a controlled-clock fixture, not the required 15-minute real Function run.
 
 Real Realtime ingestion/MVCC provenance, local Function execution and Object
 Storage are implemented with the evidence below. Phases 3–7 retain outstanding
-exit gates; React/TanStack integration is pending. The facade
-explicitly rejects SSE, changes-only/now and subset execution for now; copied
-public types and historical HTTP tests do not imply those native capabilities.
+exit gates. At the phase 2 checkpoint the facade rejected SSE, changes-only/now
+and subsets. The later phase 7 evidence below supersedes that status for SSE
+and changes-only/now; subsets remain unsupported.
 
 ## First staging and local Function evidence
 
@@ -135,8 +135,8 @@ events; they do not claim staging live correctness.
 
 The required real Realtime integration test passes unchanged after enabling
 logical replication on the dedicated staging project. See
-[the investigation](./staging-publication-investigation.md). The real 15-minute
-expiry test is available but has no completed passing run yet. Phases 3–7 remain
+[the investigation](./staging-publication-investigation.md). At this checkpoint the real 15-minute expiry gate was still pending; the later
+passing run is recorded below. Phases 3–7 remain
 incomplete.
 
 ## Object-backed replay and routing evidence
@@ -161,7 +161,7 @@ actual database transaction IDs. Reports are ignored under `.artifacts/staging`.
 An earlier real TTL run failed its pre-expiry assertion before the replication
 setup correction; its cause was not established. It is not passing evidence.
 The improved runner records response timing/status and probes the current tail
-before expiry; a fresh passing full-duration run remains required.
+before expiry; the subsequent instrumented passing run is recorded under Real expiry evidence.
 
 ## Packed React/TanStack and browser evidence
 
@@ -262,3 +262,21 @@ baseline against SQL after an installed MVCC boundary. This proves convergence
 through refetch, not incremental Electric tags/move metadata. See
 [WHERE queries](./where-queries.md). Subsets, full type/mobile behavior and the
 remaining conformance/performance gates still prevent full phase 7 acceptance.
+
+
+## Expanded type and mobile lifecycle gates
+
+The server suite now passes 112 checks, including 16 native-reader AppState/wake
+scenarios across memory/object logs and native/Electric-only headers. Controlled
+background/foreground and reason-less abort recovery preserve the handle when
+continuity exists, and refetch after owner loss. These are simulated runtime
+tests, not device execution.
+
+Eight real type scenarios check 39 columns across polling/SSE and both replica
+modes. A strict 24-column profile proves actual incremental updates and full
+replica old values. The extended profile preserves values through refetch but
+currently receives backend `upstream_cancelled` after writes; it does not pass
+full incremental event compatibility. See [type and runtime evidence](./type-and-mobile-evidence.md)
+for the precise matrix, synchronization boundaries and remaining limitations.
+Subsets, complete type/event equivalence, native server conformance, local
+performance and the comprehensive phase exit audit remain open.
