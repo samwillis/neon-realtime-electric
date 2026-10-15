@@ -156,29 +156,31 @@ for (const objects of [false, true])
       expect((await fetch(url)).status).toBe(404)
     })
     it('does not renew absolute expiry on reads or writes', async () => {
-      const expiresAt = Date.now() + 150
+      f.setNow(1000)
+      const expiresAt = 2000
       await create([{ id: 1 }], expiresAt)
+      f.setNow(1500)
       await append([{ id: 2 }])
-      let status = 200
-      const deadline = Date.now() + 1500
-      while (status === 200 && Date.now() < deadline) {
-        const result = await fetch(url, { method: 'HEAD' })
-        status = result.status
-        if (status === 200) {
-          expect(result.headers.get('Stream-Expires-At')).toBe(
-            new Date(expiresAt).toISOString()
-          )
-          await new Promise((resolve) => setTimeout(resolve, 10))
-        }
-      }
-      expect(status).toBe(404)
-      expect(Date.now()).toBeGreaterThanOrEqual(expiresAt)
+      f.setNow(1999)
+      const head = await fetch(url, { method: 'HEAD' })
+      expect(head.status).toBe(200)
+      expect(head.headers.get('Stream-Expires-At')).toBe(
+        new Date(expiresAt).toISOString()
+      )
+      expect(await (await fetch(url)).json()).toEqual([{ id: 1 }, { id: 2 }])
+      f.setNow(expiresAt)
+      expect((await fetch(url, { method: 'HEAD' })).status).toBe(404)
       expect((await fetch(url)).status).toBe(404)
     })
     it('revalidates expiry after a long-poll wait', async () => {
-      await create(undefined, Date.now() + 100)
+      f.setNow(1000)
+      await create(undefined, 2000)
       url.search = 'offset=-1&live=long-poll'
-      expect((await fetch(url)).status).toBe(404)
+      const waiting = f.nextWait()
+      const pending = fetch(url)
+      await waiting
+      f.setNow(2000)
+      expect((await pending).status).toBe(404)
     })
     it('cancels a waiting poll without poisoning the stream', async () => {
       await create()

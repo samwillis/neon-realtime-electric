@@ -43,7 +43,7 @@ real staging Object Storage coverage is recorded separately.
 The supplemental cases cover JSON HEAD metadata without object reads, immutable
 saved-offset replay, empty/now reads, waiting long polls released by appends,
 numeric cursor collisions and timeout headers, malformed/duplicate parameters,
-absolute expiry, cancellation and no-store/security policy. Wait-entry probes
+absolute expiry using an injected clock, cancellation and no-store/security policy. Wait-entry probes
 observe the real log waiter before appending or aborting. These are our tests,
 not modified upstream tests.
 

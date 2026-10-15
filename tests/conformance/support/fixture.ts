@@ -37,6 +37,8 @@ const codec: LogCodec<Json> = {
  */
 export async function createFixture(objects: boolean) {
   const store = new FixtureObjectStore()
+  let time: number | undefined
+  const now = () => time ?? Date.now()
   const waitObservers: (() => void)[] = []
   const streams = new Map<
     string,
@@ -54,7 +56,7 @@ export async function createFixture(objects: boolean) {
     if (request.method === 'GET' || request.method === 'HEAD')
       parseReadRequest(request)
     let entry = streams.get(url.pathname)
-    if (entry && Date.now() >= entry.expiresAt) {
+    if (entry && now() >= entry.expiresAt) {
       entry.log.close()
       streams.delete(url.pathname)
       entry = undefined
@@ -73,7 +75,7 @@ export async function createFixture(objects: boolean) {
       const value: Json | undefined = text ? JSON.parse(text) : undefined
       const expiresAt = request.headers.get('Stream-Expires-At')
         ? Date.parse(request.headers.get('Stream-Expires-At')!)
-        : Date.now() + 900_000
+        : now() + 900_000
       if (!Number.isFinite(expiresAt)) return response(400)
       const log = objects
         ? new ObjectJsonLog(
@@ -124,6 +126,7 @@ export async function createFixture(objects: boolean) {
     return readJsonStream(request, {
       log: entry.log,
       expiresAt: entry.expiresAt,
+      now,
       longPollMs: 100,
       sseConnectionMs: 500,
       headers: { 'content-type': entry.contentType },
@@ -178,6 +181,9 @@ export async function createFixture(objects: boolean) {
   return {
     baseUrl: `http://127.0.0.1:${(http.address() as { port: number }).port}`,
     store,
+    setNow(value: number) {
+      time = value
+    },
     nextWait: () => new Promise<void>((resolve) => waitObservers.push(resolve)),
     async close() {
       for (const log of logs) log.close()
