@@ -2,6 +2,8 @@
 
 - Use `Sam Willis <sam.willis@gmail.com>` as both author and committer. Run validation and the private-configuration audit before committing, then push each commit to `origin` immediately after creating it.
 
+- Do not work around missing Neon Realtime SQL, incremental-update or metadata capabilities. Record backend findings in the ignored `.private/neon-realtime-findings.md` report and leave the affected compatibility gates open. Never commit that findings report.
+
 - Use Sam's Neon staging workspace for real Postgres and Realtime integration tests.
 - Run the Function locally with `neon dev`. Request affinity is not available on the platform yet; do not deploy the Function for shape/affinity testing at this stage.
 - Test single-owner behavior locally and simulate routing, owner loss and expiry. Keep actual platform affinity, idle/eviction and `waitUntil` verification deferred until the required platform support exists. Local success does not prove these platform guarantees.
