@@ -175,12 +175,60 @@ assert.deepEqual(
   reference,
   'Replacement package public runtime differs from reference'
 )
+const interop = path.join(artifacts, 'interop')
+await mkdir(interop, { recursive: true })
+await writeFile(
+  path.join(interop, 'package.json'),
+  JSON.stringify({
+    name: 'compatibility-interop',
+    private: true,
+    type: 'module',
+    dependencies: {
+      'electric-reference': 'npm:@electric-sql/client@1.5.28',
+      'electric-candidate': `file:${candidate}`,
+      typescript: '5.9.3',
+      'typescript-minimum': 'npm:typescript@5.5.4',
+    },
+  }) + '\n'
+)
+const interopConsumer = await readFile(
+  path.join(root, 'tests/compatibility/interop/consumer.ts')
+)
+await writeFile(path.join(interop, 'consumer.ts'), interopConsumer)
+await writeFile(
+  path.join(interop, 'tsconfig.json'),
+  await readFile(path.join(artifacts, 'candidate/tsconfig.json'))
+)
+run(
+  'pnpm',
+  ['install', '--ignore-workspace', '--ignore-scripts', '--prefer-offline'],
+  interop
+)
+for (const compiler of ['typescript', 'typescript-minimum']) {
+  run(
+    process.execPath,
+    [`node_modules/${compiler}/bin/tsc`, '-p', 'tsconfig.json'],
+    interop
+  )
+}
+run(
+  process.execPath,
+  ['--import', 'tsx', 'tests/compatibility/interop/runtime.mjs', interop],
+  root
+)
+reports.interop = {
+  consumerHash: createHash('sha256').update(interopConsumer).digest('hex'),
+  compilers: ['5.5.4', '5.9.3'],
+  runtime: 'ESM/CJS original Shape consuming packed candidate ShapeStream',
+  source:
+    'controlled events through production handler and Durable Streams reader',
+}
 await writeFile(
   path.join(artifacts, 'report.json'),
   JSON.stringify(reports, null, 2) + '\n'
 )
 console.log(
-  'Packed replacement: identical consumer compiles on TS 5.5.4/5.9.3; ESM/CJS and browser/native resolution pass'
+  'Packed replacement: consumer and cross-package types compile on TS 5.5.4/5.9.3; ESM/CJS resolution and original Shape interoperability pass'
 )
 
 function run(command, args, cwd, capture = false) {

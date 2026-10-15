@@ -326,3 +326,21 @@ empty JSON response. The shape codec still rejects sequence gaps and evidence
 ahead of data, including object replay. The server suite has 120 checks.
 The profile closes the selected native JSON read/store conformance gate. The
 comprehensive phase audit and remaining full API/source-dependent gates stay open.
+
+## Original and replacement package interoperability
+
+`pnpm test:package` additionally installs the original npm client and the packed
+replacement together under separate aliases, without an override. Strict
+TypeScript 5.5.4/5.9.3 checks prove bidirectional structural stream assignment,
+options/messages/schema/offset/snapshot types, and inferred `Date` rows when
+either package's `Shape` consumes the other package's stream interface.
+
+Sixteen runtime scenarios attach the original and replacement `Shape` to the
+same packed replacement `ShapeStream`: all ESM/CommonJS combinations, polling/SSE
+and memory/object logs. They verify parsed dates, snake/camel mapping, baseline,
+insert/update/delete and owner-loss refetch, retaining the configured path,
+custom query and query-string handle. These tests use controlled source events
+through the production handler and real Durable Streams reader, with fixture
+object storage. They do not establish additional backend capabilities or runtime
+subsets. Cross-package error-class identity is not part of the structural
+materializer contract; application aliases must still resolve consistently.
