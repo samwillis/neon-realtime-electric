@@ -8,3 +8,4 @@ onlyBuiltDependencies:
 
 patchedDependencies:
   '@durable-streams/client@0.2.7': patches/@durable-streams__client@0.2.7.patch
+  '@neon/realtime@0.1.0': patches/@neon__realtime@0.1.0.patch

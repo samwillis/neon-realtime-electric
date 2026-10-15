@@ -1,0 +1,9 @@
+{
+  "name": "@neon/realtime-electric-function",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@neon/realtime-electric-server": "workspace:*"
+  }
+}

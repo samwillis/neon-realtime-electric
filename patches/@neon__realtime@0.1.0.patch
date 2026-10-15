@@ -1,0 +1,290 @@
+diff --git a/dist/client/realtime-client.js b/dist/client/realtime-client.js
+index f6c982046a35d39c1423bb4615fd84e1cb655fd2..f101be831208b727fe0af5ca0ac67f5aee6744cd 100644
+--- a/dist/client/realtime-client.js
++++ b/dist/client/realtime-client.js
+@@ -26,7 +26,7 @@ var RealtimeClientImpl = class {
+ 		const materialized = options?.materialize !== false;
+ 		const events = this.events.createSubscription();
+ 		const initialData = materialized ? options?.initialData : void 0;
+-		const subscription = new Subscription(this, query, materialized, this.parsers, initialData, events);
++		const subscription = new Subscription(this, query, materialized, this.parsers, initialData, events, options?.rawValues === true);
+ 		registerSubscriptionEvents(subscription, events);
+ 		const handle = this.coordinator.subscribe(query, {
+ 			events,
+diff --git a/dist/client/reconciliation/reconciler.d.ts b/dist/client/reconciliation/reconciler.d.ts
+index a31f23c4fa298d17ffc5061da273c7db817306d9..70b8e8cc0588b62fb760fb47d5c0e605fa5e5de1 100644
+--- a/dist/client/reconciliation/reconciler.d.ts
++++ b/dist/client/reconciliation/reconciler.d.ts
+@@ -5,6 +5,7 @@ import { ParsedMvccSnapshot } from "../mvcc.js";
+ interface ReconciledBatch {
+   readonly changes: readonly Change[];
+   readonly txids: readonly string[];
++  readonly frontier: { readonly lsn: string };
+ }
+ interface ReconciliationTarget {
+   /** Observe a baseline-sync attempt after reconciliation accepts it. */
+diff --git a/dist/client/reconciliation/reconciler.js b/dist/client/reconciliation/reconciler.js
+index 609fb911f5d25fd738c3ba92430c1995fed12150..62ddd24f028962b3a6ee87a9bd3880d0059ff8c5 100644
+--- a/dist/client/reconciliation/reconciler.js
++++ b/dist/client/reconciliation/reconciler.js
+@@ -79,7 +79,7 @@ var BaselineSyncPublicationReconciler = class {
+ 				this.stageReset(message);
+ 				return;
+ 			case "commit":
+-				this.publicationCommit(message.publication_id, message.body_count);
++				this.publicationCommit(message.publication_id, message.body_count, message.frontier);
+ 				return;
+ 		}
+ 	}
+@@ -187,7 +187,7 @@ var BaselineSyncPublicationReconciler = class {
+ 			});
+ 		}
+ 	}
+-	publicationCommit(publicationId, bodyCount) {
++	publicationCommit(publicationId, bodyCount, frontier) {
+ 		const publication = this.publication;
+ 		if (!publication || publication.id !== publicationId || publication.nextBody !== bodyCount) throw new ProtocolError("invalid publication commit");
+ 		this.publication = void 0;
+@@ -197,7 +197,8 @@ var BaselineSyncPublicationReconciler = class {
+ 			state.nextSequence = staged.nextSequence;
+ 			const batch = Object.freeze({
+ 				changes: Object.freeze([...staged.changes]),
+-				txids: Object.freeze([...staged.txids])
++				txids: Object.freeze([...staged.txids]),
++				frontier: Object.freeze({ ...frontier })
+ 			});
+ 			if (state.live) immediate.push({
+ 				state,
+diff --git a/dist/client/subscription.d.ts b/dist/client/subscription.d.ts
+index de60bc2996d9747c3ae5c7a3777e17ab02c42e44..674c1b8dbb723855526b241498b1cb6b3e4dd39a 100644
+--- a/dist/client/subscription.d.ts
++++ b/dist/client/subscription.d.ts
+@@ -1,6 +1,6 @@
+ import { PostgreSQLParserRegistry } from "./postgres/parsers.js";
+ import { SealedLiveQuery } from "./sealed-query.js";
+-import { LiveQueryError, LiveQuerySnapshot, LiveQueryState, MaterializedLiveQuerySubscription, RawLiveQueryUpdate } from "./types.js";
++import { RealtimeSourceEvent, LiveQueryError, LiveQuerySnapshot, LiveQueryState, MaterializedLiveQuerySubscription, RawLiveQueryUpdate } from "./types.js";
+ import { SubscriptionEventSink } from "./diagnostics/events.js";
+ import { Change, Column, Mvcc, Row as Row$1 } from "./protocol/wire-types.gen.js";
+ import { ParsedMvccSnapshot } from "./mvcc.js";
+@@ -38,15 +38,18 @@ declare class Subscription<Row> implements MaterializedLiveQuerySubscription<Row
+   private readonly updateListeners;
+   private readonly stateListeners;
+   private readonly changeListeners;
++  private readonly sourceListeners;
++  private readonly rawValues;
+   private readonly transactions;
+   closed: boolean;
+-  constructor(owner: SubscriptionOwner, query: SealedLiveQuery<Row>, materialized: boolean, parsers: PostgreSQLParserRegistry, initialData: readonly Row[] | undefined, events: SubscriptionEventSink);
++  constructor(owner: SubscriptionOwner, query: SealedLiveQuery<Row>, materialized: boolean, parsers: PostgreSQLParserRegistry, initialData: readonly Row[] | undefined, events: SubscriptionEventSink, rawValues?: boolean);
+   currentQuery(): SealedLiveQuery<Row>;
+   replaceSealedQuery(query: SealedLiveQuery<Row>): void;
+   renewalFailed(error: unknown): void;
+   admit(columns: readonly Column[]): void;
+   getState: () => LiveQueryState;
+   getSnapshot: () => LiveQuerySnapshot<Row>;
++  onSource: (listener: (event: RealtimeSourceEvent) => void) => (() => void);
+   onUpdate: (listener: (update: RawLiveQueryUpdate<Row>) => void) => (() => void);
+   onStateChange: (listener: (state: LiveQueryState) => void) => (() => void);
+   awaitTxId: (txid: string, timeout?: number) => Promise<void>;
+@@ -70,6 +73,7 @@ declare class Subscription<Row> implements MaterializedLiveQuerySubscription<Row
+   markClosed(): void;
+   private decodeReset;
+   private requireColumns;
++  private decodeValues;
+   private requireParsers;
+   private resetSynchronization;
+   private setLifecycle;
+diff --git a/dist/client/subscription.js b/dist/client/subscription.js
+index a20c69a5c5de1f566c38d71bf42b72fd5c47d344..c27698fac8289d05eafb609dc03d4319f6c88f03 100644
+--- a/dist/client/subscription.js
++++ b/dist/client/subscription.js
+@@ -29,10 +29,13 @@ var Subscription = class {
+ 	appliedBatches = /* @__PURE__ */ new Map();
+ 	updateListeners = /* @__PURE__ */ new Set();
+ 	stateListeners = /* @__PURE__ */ new Set();
++	sourceListeners = /* @__PURE__ */ new Set();
++	rawValues;
+ 	changeListeners = /* @__PURE__ */ new Set();
+ 	transactions = new TransactionTracker();
+ 	closed = false;
+-	constructor(owner, query, materialized, parsers, initialData, events) {
++	constructor(owner, query, materialized, parsers, initialData, events, rawValues = false) {
++		this.rawValues = rawValues;
+ 		this.owner = owner;
+ 		this.query = query;
+ 		this.materialized = materialized;
+@@ -55,9 +58,11 @@ var Subscription = class {
+ 	admit(columns) {
+ 		validateColumns(columns);
+ 		this.columns = columns;
++		this.notify(this.sourceListeners, { type: "schema", columns });
+ 	}
+ 	getState = () => this.state;
+ 	getSnapshot = () => this.snapshot;
++	onSource = (listener) => listen(this.sourceListeners, listener);
+ 	onUpdate = (listener) => listen(this.updateListeners, listener);
+ 	onStateChange = (listener) => listen(this.stateListeners, listener);
+ 	awaitTxId = (txid, timeout) => this.transactions.wait(txid, timeout);
+@@ -102,7 +107,7 @@ var Subscription = class {
+ 				type: "remove",
+ 				rowId: change.row_key
+ 			});
+-			const row = decodeRow(change.values, this.requireColumns(), this.requireParsers());
++			const row = this.decodeValues(change.values);
+ 			return Object.freeze({
+ 				type: "upsert",
+ 				rowId: change.row_key,
+@@ -133,6 +138,7 @@ var Subscription = class {
+ 		this.initialized = true;
+ 		this.snapshot = this.makeSnapshot();
+ 		this.transactions.applySnapshot(mvcc);
++		this.notify(this.sourceListeners, { type: "baseline", rows: _wireRows, mvcc });
+ 		this.notify(this.updateListeners, Object.freeze({
+ 			type: "rows",
+ 			rows: staged.rows
+@@ -143,6 +149,7 @@ var Subscription = class {
+ 		const changes = batch.changes.length === 0 ? Object.freeze([]) : this.appliedBatches.get(batch.changes);
+ 		if (!changes) throw new Error("Realtime published an unapplied batch");
+ 		this.appliedBatches.delete(batch.changes);
++		this.notify(this.sourceListeners, { type: "publication", changes: batch.changes, txids: batch.txids, frontier: batch.frontier });
+ 		const info = Object.freeze({ txids: batch.txids });
+ 		this.notify(this.updateListeners, Object.freeze({
+ 			type: "changes",
+@@ -153,7 +160,9 @@ var Subscription = class {
+ 		for (const txid of batch.txids) this.transactions.seen(txid);
+ 	}
+ 	applyProgress(mvcc) {
++		if (this.closed) return;
+ 		this.transactions.applyProgress(mvcc);
++		this.notify(this.sourceListeners, { type: "progress", mvcc: { xmin: String(mvcc.xmin), xmax: String(mvcc.xmax), xip: mvcc.xip.map(String) } });
+ 	}
+ 	caughtUp() {
+ 		if (this.closed) return;
+@@ -171,6 +180,7 @@ var Subscription = class {
+ 	resetRequired() {
+ 		if (this.closed) return;
+ 		this.events.resetRequired();
++		this.notify(this.sourceListeners, { type: "reset" });
+ 	}
+ 	connecting() {
+ 		this.resetSynchronization();
+@@ -208,10 +218,14 @@ var Subscription = class {
+ 			rowIds.add(wireRow.row_key);
+ 			return Object.freeze({
+ 				rowId: wireRow.row_key,
+-				row: decodeRow(wireRow.values, columns, this.requireParsers())
++				row: this.decodeValues(wireRow.values)
+ 			});
+ 		}));
+ 	}
++	decodeValues(values) {
++		const columns = this.requireColumns();
++		return this.rawValues ? Object.fromEntries(columns.map((column, index) => [column.name, values[index]])) : decodeRow(values, columns, this.requireParsers());
++	}
+ 	requireColumns() {
+ 		if (!this.columns) throw new Error("Live-query subscription is not admitted");
+ 		return this.columns;
+@@ -220,6 +234,7 @@ var Subscription = class {
+ 		return this.parsers;
+ 	}
+ 	resetSynchronization() {
++		if (this.columns) this.notify(this.sourceListeners, { type: "reset" });
+ 		this.columns = void 0;
+ 		this.appliedBatches.clear();
+ 		this.stagedReset = void 0;
+diff --git a/dist/client/types.d.ts b/dist/client/types.d.ts
+index 7cbefa2a1539edb54e2f7cf78bd0eb2374ab2c56..e562c9b58a7e027bbf3dcfb518668d9824d12bc4 100644
+--- a/dist/client/types.d.ts
++++ b/dist/client/types.d.ts
+@@ -1,6 +1,16 @@
+ import { PostgreSQLParsers } from "./postgres/parsers.js";
+ import { SealedLiveQuery } from "./sealed-query.js";
+ 
++import { Column, Mvcc, Row as WireRow, Change as WireChange } from "./protocol/wire-types.gen.js";
++
++/** Ordered source evidence after SDK reconciliation. Raw PostgreSQL cells are untouched. */
++type RealtimeSourceEvent =
++  | { readonly type: "schema"; readonly columns: readonly Column[] }
++  | { readonly type: "baseline"; readonly rows: readonly WireRow[]; readonly mvcc: Mvcc }
++  | { readonly type: "publication"; readonly changes: readonly WireChange[]; readonly txids: readonly string[]; readonly frontier: { readonly lsn: string } }
++  | { readonly type: "progress"; readonly mvcc: Mvcc }
++  | { readonly type: "reset" };
++
+ //#region src/client/types.d.ts
+ /** Client-side diagnostic verbosity. */
+ type RealtimeLogLevel = "silent" | "error" | "warn" | "info" | "debug";
+@@ -317,6 +327,8 @@ interface MaterializedLiveQueryOptions<Row> {
+ }
+ /** Options for a raw, non-materializing subscription. */
+ interface RawLiveQueryOptions {
++  /** Preserve pg_text/base64 cell values instead of invoking row parsers. */
++  readonly rawValues?: true;
+   /** Disable SDK materialization and consume raw result updates directly. */
+   readonly materialize: false;
+ }
+@@ -326,6 +338,8 @@ interface RawLiveQueryOptions {
+  * @typeParam Row - Row produced by the subscribed query.
+  */
+ interface RawLiveQuerySubscription<Row> {
++  /** Observe ordered schema, raw rows, publication frontier and MVCC evidence. Attach before delivery. */
++  onSource(listener: (event: RealtimeSourceEvent) => void): () => void;
+   /** Return the complete current lifecycle state. */
+   getState(): LiveQueryState;
+   /**
+@@ -457,5 +471,5 @@ interface RealtimeClient {
+   close(): void;
+ }
+ //#endregion
+-export { LiveQueryBatchInfo, LiveQueryChange, LiveQueryError, LiveQuerySnapshot, LiveQueryState, MaterializedLiveQueryOptions, MaterializedLiveQuerySubscription, RawLiveQueryOptions, RawLiveQueryRow, RawLiveQuerySubscription, RawLiveQueryUpdate, RealtimeClient, RealtimeClientOptions, RealtimeLogEntry, RealtimeLogEvent, RealtimeLogEventDefinition, RealtimeLogLevel, RealtimeLogger };
++export { RealtimeSourceEvent, LiveQueryBatchInfo, LiveQueryChange, LiveQueryError, LiveQuerySnapshot, LiveQueryState, MaterializedLiveQueryOptions, MaterializedLiveQuerySubscription, RawLiveQueryOptions, RawLiveQueryRow, RawLiveQuerySubscription, RawLiveQueryUpdate, RealtimeClient, RealtimeClientOptions, RealtimeLogEntry, RealtimeLogEvent, RealtimeLogEventDefinition, RealtimeLogLevel, RealtimeLogger };
+ //# sourceMappingURL=types.d.ts.map
+\ No newline at end of file
+diff --git a/dist/client.d.ts b/dist/client.d.ts
+index b178d0a2e271358da1ff79477139023f8ded16a7..cad222713b3e114450decc7c21312d72de115ec3 100644
+--- a/dist/client.d.ts
++++ b/dist/client.d.ts
+@@ -1,7 +1,7 @@
+ import { pgTypeOids } from "./client/postgres/oids.js";
+ import { PostgreSQLBytesParser, PostgreSQLParserForOid, PostgreSQLParsers, PostgreSQLTextParser, defineParsers, nodePostgresParsers, postgresJsParsers } from "./client/postgres/parsers.js";
+ import { SealedLiveQuery } from "./client/sealed-query.js";
+-import { LiveQueryBatchInfo, LiveQueryChange, LiveQueryError, LiveQuerySnapshot, LiveQueryState, MaterializedLiveQueryOptions, MaterializedLiveQuerySubscription, RawLiveQueryOptions, RawLiveQueryRow, RawLiveQuerySubscription, RawLiveQueryUpdate, RealtimeClient, RealtimeClientOptions, RealtimeLogEntry, RealtimeLogEvent, RealtimeLogLevel, RealtimeLogger } from "./client/types.js";
++import { RealtimeSourceEvent, LiveQueryBatchInfo, LiveQueryChange, LiveQueryError, LiveQuerySnapshot, LiveQueryState, MaterializedLiveQueryOptions, MaterializedLiveQuerySubscription, RawLiveQueryOptions, RawLiveQueryRow, RawLiveQuerySubscription, RawLiveQueryUpdate, RealtimeClient, RealtimeClientOptions, RealtimeLogEntry, RealtimeLogEvent, RealtimeLogLevel, RealtimeLogger } from "./client/types.js";
+ import { createRealtimeClient } from "./client/realtime-client.js";
+ import { QueryRefreshController } from "./client/query-refresh.js";
+-export { LiveQueryBatchInfo, LiveQueryChange, LiveQueryError, LiveQuerySnapshot, LiveQueryState, MaterializedLiveQueryOptions, MaterializedLiveQuerySubscription, PostgreSQLBytesParser, PostgreSQLParserForOid, PostgreSQLParsers, PostgreSQLTextParser, QueryRefreshController, RawLiveQueryOptions, RawLiveQueryRow, RawLiveQuerySubscription, RawLiveQueryUpdate, RealtimeClient, RealtimeClientOptions, RealtimeLogEntry, RealtimeLogEvent, RealtimeLogLevel, RealtimeLogger, SealedLiveQuery, createRealtimeClient, defineParsers, nodePostgresParsers, pgTypeOids, postgresJsParsers };
+\ No newline at end of file
++export { RealtimeSourceEvent, LiveQueryBatchInfo, LiveQueryChange, LiveQueryError, LiveQuerySnapshot, LiveQueryState, MaterializedLiveQueryOptions, MaterializedLiveQuerySubscription, PostgreSQLBytesParser, PostgreSQLParserForOid, PostgreSQLParsers, PostgreSQLTextParser, QueryRefreshController, RawLiveQueryOptions, RawLiveQueryRow, RawLiveQuerySubscription, RawLiveQueryUpdate, RealtimeClient, RealtimeClientOptions, RealtimeLogEntry, RealtimeLogEvent, RealtimeLogLevel, RealtimeLogger, SealedLiveQuery, createRealtimeClient, defineParsers, nodePostgresParsers, pgTypeOids, postgresJsParsers };
+\ No newline at end of file
+diff --git a/dist/index.d.ts b/dist/index.d.ts
+index dfacb14157701f93b63089f9acac7495430aae30..9ce324b3031767413f18ecaab0e7f81044598ff4 100644
+--- a/dist/index.d.ts
++++ b/dist/index.d.ts
+@@ -1,11 +1,11 @@
+ import { pgTypeOids } from "./client/postgres/oids.js";
+ import { PostgreSQLBytesParser, PostgreSQLParserForOid, PostgreSQLParsers, PostgreSQLTextParser, defineParsers, nodePostgresParsers, postgresJsParsers } from "./client/postgres/parsers.js";
+ import { SealedLiveQuery } from "./client/sealed-query.js";
+-import { LiveQueryBatchInfo, LiveQueryChange, LiveQueryError, LiveQuerySnapshot, LiveQueryState, MaterializedLiveQueryOptions, MaterializedLiveQuerySubscription, RawLiveQueryOptions, RawLiveQueryRow, RawLiveQuerySubscription, RawLiveQueryUpdate, RealtimeClient, RealtimeClientOptions, RealtimeLogEntry, RealtimeLogEvent, RealtimeLogLevel, RealtimeLogger } from "./client/types.js";
++import { RealtimeSourceEvent, LiveQueryBatchInfo, LiveQueryChange, LiveQueryError, LiveQuerySnapshot, LiveQueryState, MaterializedLiveQueryOptions, MaterializedLiveQuerySubscription, RawLiveQueryOptions, RawLiveQueryRow, RawLiveQuerySubscription, RawLiveQueryUpdate, RealtimeClient, RealtimeClientOptions, RealtimeLogEntry, RealtimeLogEvent, RealtimeLogLevel, RealtimeLogger } from "./client/types.js";
+ import { createRealtimeClient } from "./client/realtime-client.js";
+ import { QueryRefreshController } from "./client/query-refresh.js";
+ import { PreparedLiveQuery, PreparedLiveQueryParameter, RealtimeAdapter } from "./server/adapter.js";
+ import { PostgresParameterHelpers, TypedRawSqlParameter, pgParam } from "./server/raw-parameter.js";
+ import { RawSqlParameter, RawSqlQuery, rawSql } from "./server/raw-sql.js";
+ import { RealtimeDirectServer, RealtimeDirectServerOptions, RealtimeServer, RealtimeServerOptions, createRealtime } from "./server/realtime.js";
+-export { LiveQueryBatchInfo, LiveQueryChange, LiveQueryError, LiveQuerySnapshot, LiveQueryState, MaterializedLiveQueryOptions, MaterializedLiveQuerySubscription, PostgreSQLBytesParser, PostgreSQLParserForOid, PostgreSQLParsers, PostgreSQLTextParser, type PostgresParameterHelpers, type PreparedLiveQuery, type PreparedLiveQueryParameter, QueryRefreshController, RawLiveQueryOptions, RawLiveQueryRow, RawLiveQuerySubscription, RawLiveQueryUpdate, type RawSqlParameter, type RawSqlQuery, type RealtimeAdapter, RealtimeClient, RealtimeClientOptions, type RealtimeDirectServer, type RealtimeDirectServerOptions, RealtimeLogEntry, RealtimeLogEvent, RealtimeLogLevel, RealtimeLogger, type RealtimeServer, type RealtimeServerOptions, SealedLiveQuery, type TypedRawSqlParameter, createRealtime, createRealtimeClient, defineParsers, nodePostgresParsers, pgParam, pgTypeOids, postgresJsParsers, rawSql };
+\ No newline at end of file
++export { RealtimeSourceEvent, LiveQueryBatchInfo, LiveQueryChange, LiveQueryError, LiveQuerySnapshot, LiveQueryState, MaterializedLiveQueryOptions, MaterializedLiveQuerySubscription, PostgreSQLBytesParser, PostgreSQLParserForOid, PostgreSQLParsers, PostgreSQLTextParser, type PostgresParameterHelpers, type PreparedLiveQuery, type PreparedLiveQueryParameter, QueryRefreshController, RawLiveQueryOptions, RawLiveQueryRow, RawLiveQuerySubscription, RawLiveQueryUpdate, type RawSqlParameter, type RawSqlQuery, type RealtimeAdapter, RealtimeClient, RealtimeClientOptions, type RealtimeDirectServer, type RealtimeDirectServerOptions, RealtimeLogEntry, RealtimeLogEvent, RealtimeLogLevel, RealtimeLogger, type RealtimeServer, type RealtimeServerOptions, SealedLiveQuery, type TypedRawSqlParameter, createRealtime, createRealtimeClient, defineParsers, nodePostgresParsers, pgParam, pgTypeOids, postgresJsParsers, rawSql };
+\ No newline at end of file
+diff --git a/dist/server/direct-subscription.js b/dist/server/direct-subscription.js
+index 22e7615f043c10766eabe1650c554f2c3962096f..460a9298ec3dc9188835e1722bba345446e5d4ea 100644
+--- a/dist/server/direct-subscription.js
++++ b/dist/server/direct-subscription.js
+@@ -23,6 +23,7 @@ function manageDirectSubscription(subscription, query, refreshQuery, removed) {
+ 	});
+ 	const base = {
+ 		getState: () => subscription.getState(),
++		onSource: (listener) => subscription.onSource(listener),
+ 		onUpdate: (listener) => subscription.onUpdate(listener),
+ 		onStateChange: (listener) => subscription.onStateChange(listener),
+ 		awaitTxId: (txid, timeout) => subscription.awaitTxId(txid, timeout),

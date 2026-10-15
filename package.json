@@ -9,26 +9,34 @@
   },
   "scripts": {
     "build": "pnpm --filter @neon/realtime-electric-client build",
-    "typecheck": "pnpm --filter @neon/realtime-electric-client typecheck && pnpm --filter @neon/realtime-electric-protocol typecheck && tsc --noEmit -p tests/transport/tsconfig.json",
-    "test": "pnpm test:client && pnpm test:transport",
+    "typecheck": "pnpm --filter @neon/realtime-electric-client typecheck && pnpm --filter @neon/realtime-electric-protocol typecheck && tsc --noEmit -p tests/transport/tsconfig.json && tsc --noEmit -p packages/server/tsconfig.json && tsc --noEmit -p apps/function/tsconfig.json",
+    "test": "pnpm test:client && pnpm test:transport && pnpm test:server",
     "test:client": "pnpm --filter @neon/realtime-electric-client test:unit",
     "test:types": "pnpm --filter @neon/realtime-electric-client test:types",
     "test:package": "node scripts/test-package-compatibility.mjs",
     "check:upstream": "node scripts/import-electric-client.mjs --check",
     "check:api": "node scripts/compare-public-api.mjs",
-    "lint": "prettier --check scripts/*.mjs package.json pnpm-workspace.yaml tests/compatibility/consumer.ts packages/protocol packages/client/src/transport tests/transport tests/compatibility/proxies vitest.*.config.ts",
+    "lint": "prettier --check scripts/*.mjs package.json pnpm-workspace.yaml tests/compatibility/consumer.ts packages/protocol packages/client/src/transport tests/transport tests/compatibility/proxies vitest.*.config.ts packages/server tests/server tests/integration apps/function neon.ts scripts/test-local-baseline.ts",
     "test:transport": "vitest run --config vitest.transport.config.ts",
     "test:durable-reader": "node scripts/test-durable-reader-conformance.mjs",
     "test:proxy": "vitest run --config vitest.proxy.config.ts",
-    "test:durable-reader-install": "node scripts/test-durable-reader-install.mjs"
+    "test:durable-reader-install": "node scripts/test-durable-reader-install.mjs",
+    "test:server": "vitest run --config vitest.server.config.ts",
+    "test:integration": "vitest run --config vitest.staging.config.ts",
+    "test:sdk-patch": "node scripts/test-realtime-sdk-install.mjs",
+    "test:local-baseline": "tsx scripts/test-local-baseline.ts",
+    "test:local-expiry": "node scripts/test-local-expiry.mjs",
+    "dev:function": "node --env-file=.env.local scripts/dev-function.mjs"
   },
   "devDependencies": {
     "@durable-streams/client": "0.2.7",
     "@durable-streams/client-conformance-tests": "0.2.13",
     "@durable-streams/server": "0.3.9",
+    "@neon/config": "1.9.1",
     "@types/node": "24.10.1",
     "@types/pg": "8.11.6",
     "@types/uuid": "10.0.0",
+    "@types/ws": "8.18.1",
     "cache-control-parser": "2.0.6",
     "fast-check": "4.6.0",
     "jsdom": "26.1.0",
@@ -40,6 +48,7 @@
     "typescript": "5.9.3",
     "uuid": "10.0.0",
     "vitest": "4.0.15",
-    "vitest-localstorage-mock": "0.1.2"
+    "vitest-localstorage-mock": "0.1.2",
+    "ws": "8.21.2"
   }
 }
