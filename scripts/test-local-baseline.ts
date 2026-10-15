@@ -45,7 +45,8 @@ try {
   resumed.searchParams.set('handle', stream.shapeHandle)
   resumed.searchParams.set('offset', stream.lastOffset)
   const response = await fetch(resumed, { signal: abort.signal })
-  assert.equal(response.status, 204)
+  assert.equal(response.status, 200)
+  assert.deepEqual(await response.json(), [])
   assert(response.headers.has('electric-schema'))
   await mkdir('.artifacts/staging', { recursive: true })
   await writeFile(

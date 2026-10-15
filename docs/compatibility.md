@@ -10,7 +10,7 @@ local/staging test target, as agreed in `AGENTS.md`.
 | 1: internal transport boundary                | Passed                                 | HTTP adapter extracted; all 553 baseline checks, build/typecheck, packed consumers and 62-export declaration comparison pass                                                                                                            |
 | 2: real Durable Streams delivery              | Implemented; final gate audit pending  | Real reader/reference server; 59 native/protocol tests, 18 packed proxy tests, consumer/lifecycle conformance and clean patch install; early real staging/Function no-reader lifecycle now passes                                       |
 | 3: real staging Realtime                      | Implemented in part; live gate passed  | Pinned SDK evidence patch, source adapter, serialized owner and WHERE passthrough; real baseline/live publications and transaction evidence pass after enabling logical replication; see docs/staging-publication-investigation.md |
-| 4: Function handler and lifecycle             | Implemented in part; gates outstanding | Fetch read/HEAD/DELETE/long-poll/SSE handler, 112 server checks including real native reader; staging snapshot through `neon dev` passes; conformance audit outstanding; controlled two-process routing and real local no-reader replay pass |
+| 4: Function handler and lifecycle             | Implemented in part; gates outstanding | Fetch read/HEAD/DELETE/long-poll/SSE handler, 120 server checks; selected native JSON read/store conformance passes; staging snapshot/lifecycle through `neon dev` and controlled owner routing pass; final gate audit outstanding |
 | 5: Object Storage                             | Implemented in part; gates outstanding | Shared memory/object index and replay tests, real S3 SDK/HTTP fixture, live staging Object Storage replay/cleanup pass; local object-backed baseline/lifecycle pass; real local 15-minute expiry/refetch run passes                        |
 | 6: replacement package/integrations           | Implemented; gate audit pending        | Fresh packed original/candidate React/TanStack builds and TS 5.5/5.9 compilation; Chrome baseline/live/auth/refetch and optimistic real tx acknowledgement pass                                                                         |
 | 7: complete API expansion                     | Implemented in part                                | SSE, replica modes, changes-only/now, WHERE passthrough, expanded real type matrix and native-reader mobile lifecycle gates implemented; complete types/events, subsets and exact MVCC/cut reconciliation remain                                                                                                                   |
@@ -310,3 +310,19 @@ Function-safe cursor helper follows its interval/jitter rules using integer
 arithmetic; the reference server remains a test dependency.
 The resulting Function starts under `neon dev`; real polling/SSE mode checks and
 a direct numeric/proof-cursor monotonicity probe pass against staging services.
+
+## Production JSON server conformance profile
+
+The pinned native server selection now passes 46 unchanged upstream assertions
+and 18 supplemental JSON read checks across the production memory/object log
+and shared Fetch read implementation. All 630 other registered upstream cases
+are explicitly excluded; full generic server conformance is not claimed.
+See [native server profile](./native-server-conformance.md) for exact scope,
+producer-fixture boundaries, cache policy and coverage enforcement.
+
+Non-live empty JSON reads return `200 []`; long-poll timeouts remain `204`.
+SSE also rejects a missing offset. The local baseline script checks the exact
+empty JSON response. The shape codec still rejects sequence gaps and evidence
+ahead of data, including object replay. The server suite has 120 checks.
+The profile closes the selected native JSON read/store conformance gate. The
+comprehensive phase audit and remaining full API/source-dependent gates stay open.

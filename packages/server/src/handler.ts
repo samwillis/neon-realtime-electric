@@ -5,14 +5,18 @@ import {
   decodeReadProof,
   encodeReadProof,
 } from '@neon/realtime-electric-protocol/read-proof'
-import { generateResponseCursor } from './cursor.js'
+import {
+  parseReadRequest,
+  readHeaders,
+  readJsonStream,
+  ReadRequestError,
+} from './json-read.js'
 import {
   SourceQueryRejectedError,
   type RealtimeSource,
 } from './realtime-source.js'
 import { ShapeOwner, type OwnerDefinition } from './shape-owner.js'
 import { ObjectShapeLog } from './object-log.js'
-import type { LogRead } from './shape-log.js'
 
 export interface AuthorizedShape {
   definition: OwnerDefinition
@@ -48,12 +52,9 @@ export function createShapeHandler(options: ShapeHandlerOptions) {
   const pendingCleanup = new Set<Promise<void>>()
   let cleanupError: Error | undefined
   const cors = {
-    'access-control-allow-origin': '*',
-    'x-content-type-options': 'nosniff',
-    'cross-origin-resource-policy': 'cross-origin',
+    ...readHeaders,
     'access-control-expose-headers':
       'electric-handle,electric-offset,electric-cursor,electric-schema,electric-up-to-date,Stream-Next-Offset,Stream-Up-To-Date,Stream-Cursor,Stream-Expires-At',
-    'cache-control': 'no-store',
   }
   const remove = (handle: string) => {
     const entry = owners.get(handle)
@@ -180,42 +181,16 @@ export function createShapeHandler(options: ShapeHandlerOptions) {
         )
         .digest('hex')
       const url = new URL(request.url)
-      for (const name of [
-        'handle',
-        'offset',
-        'cursor',
-        'live',
-        'live_sse',
-        'experimental_live_sse',
-      ]) {
-        if (url.searchParams.getAll(name).length > 1)
-          return Response.json(
-            { error: `Repeated ${name} parameter` },
-            { status: 400, headers: cors }
-          )
+      let query: ReturnType<typeof parseReadRequest>
+      try {
+        query = parseReadRequest(request)
+      } catch (error) {
+        if (!(error instanceof ReadRequestError)) throw error
+        return Response.json(
+          { error: error.message },
+          { status: 400, headers: cors }
+        )
       }
-      const requestedOffset = url.searchParams.get('offset')
-      if (
-        requestedOffset !== null &&
-        (!requestedOffset || /[\s,]/.test(requestedOffset))
-      )
-        return Response.json(
-          { error: 'Invalid shape offset' },
-          { status: 400, headers: cors }
-        )
-      const isSse =
-        url.searchParams.get('live') === 'sse' ||
-        (url.searchParams.get('live') === 'true' &&
-          (url.searchParams.get('live_sse') === 'true' ||
-            url.searchParams.get('experimental_live_sse') === 'true'))
-      const isLongPoll =
-        !isSse &&
-        ['true', 'long-poll'].includes(url.searchParams.get('live') ?? '')
-      if (request.method === 'GET' && isLongPoll && requestedOffset === null)
-        return Response.json(
-          { error: 'Long polling requires an offset' },
-          { status: 400, headers: cors }
-        )
       let handle = url.searchParams.get('handle')
       let entry = handle ? owners.get(handle) : undefined
       if (handle && !entry) return refetch(authorized, identity, request.method)
@@ -248,68 +223,6 @@ export function createShapeHandler(options: ShapeHandlerOptions) {
       // handles can hydrate directly at the captured, immutable tail boundary.
       const readOffset =
         offset === 'now' ? (handle ? owner.log.head.offset : '-1') : offset
-      let read
-      try {
-        read =
-          request.method === 'HEAD'
-            ? {
-                ...owner.log.inspect(readOffset),
-                end: owner.log.head,
-                atTail: true,
-                envelopes: [],
-              }
-            : await owner.log.read(
-                readOffset,
-                options.maxEnvelopesPerRead,
-                request.signal
-              )
-      } catch (error) {
-        request.signal.throwIfAborted()
-        if (!(error instanceof InvalidLogOffsetError)) {
-          owner.close(error instanceof Error ? error : new Error(String(error)))
-          return failedOwner(owner, error, authorized, identity, request.method)
-        }
-        return Response.json(
-          { error: 'Invalid shape offset' },
-          { status: 400, headers: cors }
-        )
-      }
-      if (
-        request.method === 'GET' &&
-        isLongPoll &&
-        read.envelopes.length === 0
-      ) {
-        await owner.log.wait(
-          readOffset,
-          request.signal,
-          Math.min(
-            options.longPollMs ?? 20_000,
-            Math.max(1, owner.expiresAt - now())
-          )
-        )
-        try {
-          await owner.settled()
-        } catch (error) {
-          return failedOwner(owner, error, authorized, identity, request.method)
-        }
-        try {
-          read = await owner.log.read(
-            readOffset,
-            options.maxEnvelopesPerRead,
-            request.signal
-          )
-        } catch (error) {
-          request.signal.throwIfAborted()
-          owner.close(error instanceof Error ? error : new Error(String(error)))
-          return failedOwner(owner, error, authorized, identity, request.method)
-        }
-      }
-      try {
-        owner.assertValid()
-      } catch (error) {
-        return failedOwner(owner, error, authorized, identity, request.method)
-      }
-      const end = request.method === 'HEAD' ? owner.log.head : read.end
       let clientCursor = url.searchParams.get('cursor') ?? undefined
       // Existing Electric proxies forward the proof-bearing cursor. Recover its
       // native cache cursor while keeping sequence/cut evidence independent.
@@ -320,129 +233,71 @@ export function createShapeHandler(options: ShapeHandlerOptions) {
           clientCursor = undefined
         }
       }
-      const nativeCursor = isLongPoll
-        ? generateResponseCursor(clientCursor)
-        : undefined
-      const headers = new Headers({
-        ...cors,
-        'content-type': 'application/json',
-        'electric-handle': owner.handle,
-        'electric-offset': end.offset,
-        'Stream-Next-Offset': end.offset,
-        'Stream-Expires-At': new Date(owner.expiresAt).toISOString(),
-        'electric-cursor': encodeReadProof({
-          version: 1,
-          offset,
-          afterSeq: read.boundary.afterSeq,
-          baselineComplete: read.boundary.baselineComplete,
-          ...(nativeCursor ? { nativeCursor } : {}),
-        }),
-      })
-      if (nativeCursor) headers.set('Stream-Cursor', nativeCursor)
-      if (owner.schema)
-        headers.set('electric-schema', JSON.stringify(owner.schema))
-      if (read.atTail) {
-        headers.set('Stream-Up-To-Date', 'true')
-        headers.set('electric-up-to-date', 'true')
-      }
-      if (request.method === 'HEAD')
-        return new Response(null, { status: 200, headers })
-      if (isSse) {
-        // The facade enters SSE after its eager baseline. Headers carry the
-        // immutable schema for every subsequent data/control pair.
-        if (!owner.schema)
+      if (query.isSse && !owner.schema)
+        return Response.json(
+          { error: 'Initialize the shape before opening SSE' },
+          { status: 400, headers: cors }
+        )
+      try {
+        return await readJsonStream(request, {
+          log: owner.log,
+          expiresAt: owner.expiresAt,
+          now,
+          readOffset,
+          cursor: clientCursor,
+          longPollMs: options.longPollMs,
+          maxMessages: options.maxEnvelopesPerRead,
+          sseConnectionMs: options.sseConnectionMs,
+          headers: cors,
+          settled: () => owner.settled(),
+          assertValid: () => owner.assertValid(),
+          decorate(read, headers, nativeCursor) {
+            headers.set('electric-handle', owner.handle)
+            headers.set('electric-offset', read.end.offset)
+            headers.set(
+              'electric-cursor',
+              encodeReadProof({
+                version: 1,
+                offset,
+                afterSeq: read.boundary.afterSeq,
+                baselineComplete: read.boundary.baselineComplete,
+                ...(nativeCursor ? { nativeCursor } : {}),
+              })
+            )
+            if (owner.schema)
+              headers.set('electric-schema', JSON.stringify(owner.schema))
+            if (read.atTail) headers.set('electric-up-to-date', 'true')
+          },
+          eventCursor(batch, nativeCursor) {
+            return encodeReadProof({
+              version: 1,
+              offset: batch.boundary.offset,
+              afterSeq: batch.boundary.afterSeq,
+              baselineComplete: batch.boundary.baselineComplete,
+              nativeCursor,
+            })
+          },
+          onStreamError(error) {
+            owner.close(
+              error instanceof Error ? error : new Error(String(error))
+            )
+            if (!(error instanceof SourceQueryRejectedError))
+              remove(owner.handle)
+          },
+        })
+      } catch (error) {
+        request.signal.throwIfAborted()
+        if (
+          error instanceof InvalidLogOffsetError ||
+          error instanceof ReadRequestError
+        )
           return Response.json(
-            { error: 'Initialize the shape before opening SSE' },
+            { error: error.message },
             { status: 400, headers: cors }
           )
-        headers.set('content-type', 'text/event-stream')
-        headers.set('x-accel-buffering', 'no')
-        headers.delete('Stream-Up-To-Date')
-        headers.delete('electric-up-to-date')
-        const stop = new AbortController()
-        const signal = AbortSignal.any([request.signal, stop.signal])
-        const deadline = Math.min(
-          owner.expiresAt,
-          now() + (options.sseConnectionMs ?? 20_000)
-        )
-        const encoder = new TextEncoder()
-        let initial: LogRead | undefined = read
-        let position = offset
-        return new Response(
-          new ReadableStream<Uint8Array>({
-            async pull(controller) {
-              try {
-                signal.throwIfAborted()
-                await owner.settled()
-                let batch = initial
-                initial = undefined
-                if (!batch) {
-                  batch = await owner.log.read(
-                    position,
-                    options.maxEnvelopesPerRead,
-                    signal
-                  )
-                  if (!batch.envelopes.length) {
-                    await owner.log.wait(
-                      position,
-                      signal,
-                      Math.max(1, Math.min(10_000, deadline - now()))
-                    )
-                    await owner.settled()
-                    batch = await owner.log.read(
-                      position,
-                      options.maxEnvelopesPerRead,
-                      signal
-                    )
-                  }
-                }
-                owner.assertValid()
-                const proof = encodeReadProof({
-                  version: 1,
-                  offset: batch.boundary.offset,
-                  afterSeq: batch.boundary.afterSeq,
-                  baselineComplete: batch.boundary.baselineComplete,
-                })
-                const control = {
-                  streamNextOffset: batch.end.offset,
-                  streamCursor: proof,
-                  upToDate: batch.atTail,
-                }
-                // JSON encoding keeps embedded CR/LF in values inside one SSE
-                // data line. Pair even empty data with its exact start proof.
-                controller.enqueue(
-                  encoder.encode(
-                    `event: data\ndata: ${JSON.stringify(batch.envelopes)}\n\nevent: control\ndata: ${JSON.stringify(control)}\n\n`
-                  )
-                )
-                position = batch.end.offset
-                if (now() >= deadline) controller.close()
-              } catch (error) {
-                if (!signal.aborted) {
-                  owner.close(
-                    error instanceof Error ? error : new Error(String(error))
-                  )
-                  if (!(error instanceof SourceQueryRejectedError))
-                    remove(owner.handle)
-                  // A complete EOF sends the native reader back through HTTP,
-                  // where the invalidated handle receives an explicit refetch.
-                  controller.close()
-                } else {
-                  controller.error(error)
-                }
-              }
-            },
-            cancel() {
-              stop.abort()
-            },
-          }),
-          { status: 200, headers }
-        )
+        owner.close(error instanceof Error ? error : new Error(String(error)))
+        return failedOwner(owner, error, authorized, identity, request.method)
       }
-      return new Response(
-        read.envelopes.length ? JSON.stringify(read.envelopes) : null,
-        { status: read.envelopes.length ? 200 : 204, headers }
-      )
     },
     close() {
       closed = true

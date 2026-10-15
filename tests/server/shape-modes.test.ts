@@ -210,7 +210,8 @@ describe('replica and changes-only boundaries', () => {
       const head = await handler.fetch(
         new Request(`http://local/shape?handle=${handle}&offset=now`)
       )
-      expect(head.status).toBe(204)
+      expect(head.status).toBe(200)
+      expect(await head.json()).toEqual([])
       expect(
         decodeReadProof(head.headers.get('electric-cursor'))
       ).toMatchObject({ offset: 'now', baselineComplete: true })

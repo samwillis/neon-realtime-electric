@@ -74,3 +74,8 @@ starting the acceptance run to avoid mixing hot reload with expiry behavior.
 
 See [local performance](./local-performance.md) for the measured size/fan-out
 profile, limitations and the `test:local-performance` workflow with real storage.
+
+Non-live saved-tail/now JSON reads use `200 []`; only long-poll timeouts use
+`204`. The `test:local-baseline` script checks the body as well as its status.
+See [native server conformance](./native-server-conformance.md) for the shared
+production read/store profile and its explicitly excluded scope.

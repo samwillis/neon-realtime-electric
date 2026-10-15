@@ -9,25 +9,27 @@ export interface LogBoundary {
   afterSeq: Sequence
   baselineComplete: boolean
 }
-export interface LogRead {
+export interface LogRead<T = Envelope> {
   boundary: LogBoundary
   end: LogBoundary
-  envelopes: Envelope[]
+  envelopes: T[]
   atTail: boolean
 }
-export interface ShapeLog {
+export interface JsonLog<T> {
   readonly head: LogBoundary
   readonly disposed?: Promise<void>
-  append(value: Envelope): LogBoundary
-  inspect(offset: string, limit?: number): Omit<LogRead, 'envelopes'>
+  append(value: T): LogBoundary
+  inspect(offset: string, limit?: number): Omit<LogRead<T>, 'envelopes'>
   read(
     offset: string,
     limit?: number,
     signal?: AbortSignal
-  ): LogRead | Promise<LogRead>
+  ): LogRead<T> | Promise<LogRead<T>>
   wait(offset: string, signal: AbortSignal, timeoutMs: number): Promise<void>
   close(): void
 }
+export type ShapeLog = JsonLog<Envelope>
+
 export class InvalidLogOffsetError extends Error {}
 export class LogStorageError extends Error {}
 
@@ -45,8 +47,38 @@ export interface LogSelection {
   atTail: boolean
 }
 
-/** One immutable offset/sequence index, shared by both persistence backends. */
-export abstract class IndexedShapeLog implements ShapeLog {
+/** Validation and shape evidence, independent of storage and HTTP framing. */
+export interface LogCodec<T> {
+  parse(value: unknown): T
+  advance(value: T, previous: LogBoundary): Omit<LogBoundary, 'offset'>
+  validateRead(value: T, boundary: LogBoundary): void
+}
+
+export const shapeLogCodec: LogCodec<Envelope> = {
+  parse: parseEnvelope,
+  advance(envelope, previous) {
+    if (BigInt(envelope.seq) !== BigInt(previous.afterSeq) + 1n)
+      throw new Error('Shape append sequence is not contiguous')
+    if (
+      (envelope.kind === 'progress' || envelope.kind === 'snapshot-complete') &&
+      BigInt(envelope.coveredSeq) > BigInt(previous.afterSeq)
+    )
+      throw new Error('Shape evidence precedes covered data')
+    return {
+      afterSeq: envelope.seq,
+      baselineComplete:
+        previous.baselineComplete || envelope.kind === 'snapshot-complete',
+    }
+  },
+  validateRead(value, boundary) {
+    if (value.seq !== boundary.afterSeq)
+      throw new Error('Sealed range sequence mismatch')
+  },
+}
+
+/** Shared byte index and waiters. The codec adds shape sequence/evidence checks. */
+export abstract class IndexedJsonLog<T> implements JsonLog<T> {
+  constructor(protected readonly codec: LogCodec<T>) {}
   protected readonly entries: LogEntry[] = []
   readonly #index = new Map<string, number>([['-1', 0]])
   readonly #waiters = new Set<() => void>()
@@ -61,24 +93,16 @@ export abstract class IndexedShapeLog implements ShapeLog {
   get head(): LogBoundary {
     return { ...(this.entries.at(-1)?.boundary ?? this.initial) }
   }
-  append(value: Envelope): LogBoundary {
+  append(value: T): LogBoundary {
     if (this.#closed) throw new Error('Shape log is closed')
-    const envelope = parseEnvelope(value)
-    if (BigInt(envelope.seq) !== BigInt(this.head.afterSeq) + 1n)
-      throw new Error('Shape append sequence is not contiguous')
-    if (
-      (envelope.kind === 'progress' || envelope.kind === 'snapshot-complete') &&
-      BigInt(envelope.coveredSeq) > BigInt(this.head.afterSeq)
-    )
-      throw new Error('Shape evidence precedes covered data')
-    const encoded = JSON.stringify(envelope)
+    const parsed = this.codec.parse(value)
+    const metadata = this.codec.advance(parsed, this.head)
+    const encoded = JSON.stringify(parsed)
     const bytes = Buffer.byteLength(encoded) + 1
     this.#bytes += BigInt(bytes)
     const boundary: LogBoundary = {
       offset: `0000000000000000_${String(this.#bytes).padStart(16, '0')}`,
-      afterSeq: envelope.seq,
-      baselineComplete:
-        this.head.baselineComplete || envelope.kind === 'snapshot-complete',
+      ...metadata,
     }
     this.entries.push({ encoded, bytes, boundary })
     this.#index.set(boundary.offset, this.entries.length)
@@ -101,7 +125,7 @@ export abstract class IndexedShapeLog implements ShapeLog {
       atTail: index + entries.length === this.entries.length,
     }
   }
-  inspect(offset: string, limit?: number): Omit<LogRead, 'envelopes'> {
+  inspect(offset: string, limit?: number): Omit<LogRead<T>, 'envelopes'> {
     const { entries: _, index: __, ...metadata } = this.select(offset, limit)
     return metadata
   }
@@ -109,7 +133,7 @@ export abstract class IndexedShapeLog implements ShapeLog {
     offset: string,
     limit?: number,
     signal?: AbortSignal
-  ): LogRead | Promise<LogRead>
+  ): LogRead<T> | Promise<LogRead<T>>
   async wait(
     offset: string,
     signal: AbortSignal,
@@ -141,5 +165,12 @@ export abstract class IndexedShapeLog implements ShapeLog {
   }
   #wake(): void {
     for (const wake of [...this.#waiters]) wake()
+  }
+}
+
+/** Shape-specialized index retained for existing custom storage implementations. */
+export abstract class IndexedShapeLog extends IndexedJsonLog<Envelope> {
+  constructor() {
+    super(shapeLogCodec)
   }
 }

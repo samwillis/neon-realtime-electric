@@ -1,7 +1,9 @@
 import { createHash } from 'node:crypto'
-import { parseEnvelope, type Envelope } from '@neon/realtime-electric-protocol'
+import type { Envelope } from '@neon/realtime-electric-protocol'
 import {
-  IndexedShapeLog,
+  IndexedJsonLog,
+  shapeLogCodec,
+  type LogCodec,
   LogStorageError,
   type LogBoundary,
   type LogRead,
@@ -28,7 +30,7 @@ interface SealedRange {
 }
 
 /** Immutable sealed JSON ranges plus a resident tail; the index never moves. */
-export class ObjectShapeLog extends IndexedShapeLog {
+export class ObjectJsonLog<T> extends IndexedJsonLog<T> {
   readonly #ranges: SealedRange[] = []
   readonly #attemptedKeys = new Set<string>()
   readonly #abort = new AbortController()
@@ -42,8 +44,11 @@ export class ObjectShapeLog extends IndexedShapeLog {
   #disposal: Promise<void> = Promise.resolve()
   #uploadError?: Error
 
-  constructor(private readonly options: ObjectLogOptions) {
-    super()
+  constructor(
+    private readonly options: ObjectLogOptions,
+    codec: LogCodec<T>
+  ) {
+    super(codec)
     this.#sealBytes = options.sealBytes ?? 256 * 1024
     this.#maxResidentBytes = options.maxResidentBytes ?? 8 * 1024 * 1024
     if (!options.prefix || options.prefix.endsWith('/'))
@@ -72,14 +77,15 @@ export class ObjectShapeLog extends IndexedShapeLog {
     return this.#disposal
   }
 
-  override append(value: Envelope): LogBoundary {
-    const bytes = Buffer.byteLength(JSON.stringify(value)) + 1
+  override append(value: T): LogBoundary {
+    const parsed = this.codec.parse(value)
+    const bytes = Buffer.byteLength(JSON.stringify(parsed)) + 1
     if (this.#residentBytes + bytes > this.#maxResidentBytes) {
       throw new LogStorageError(
         'Object log resident byte limit exceeded; refetch required'
       )
     }
-    const boundary = super.append(value)
+    const boundary = super.append(parsed)
     this.#residentBytes += bytes
     this.#schedule()
     return boundary
@@ -151,7 +157,7 @@ export class ObjectShapeLog extends IndexedShapeLog {
     offset: string,
     limit?: number,
     signal?: AbortSignal
-  ): Promise<LogRead> {
+  ): Promise<LogRead<T>> {
     const readSignal = signal
       ? AbortSignal.any([signal, this.#abort.signal])
       : this.#abort.signal
@@ -162,13 +168,15 @@ export class ObjectShapeLog extends IndexedShapeLog {
       encoded: entry.encoded,
       index: index + i,
     }))
-    const loaded = new Map<SealedRange, Envelope[]>()
-    const envelopes: Envelope[] = []
+    const loaded = new Map<SealedRange, T[]>()
+    const envelopes: T[] = []
     try {
       for (const record of records) {
         readSignal.throwIfAborted()
         if (record.encoded !== undefined) {
-          envelopes.push(parseEnvelope(JSON.parse(record.encoded)))
+          const value = this.codec.parse(JSON.parse(record.encoded))
+          this.codec.validateRead(value, this.entries[record.index].boundary)
+          envelopes.push(value)
           continue
         }
         const range = this.#ranges.find(
@@ -185,14 +193,14 @@ export class ObjectShapeLog extends IndexedShapeLog {
           values = text
             .slice(0, -1)
             .split('\n')
-            .map((line) => parseEnvelope(JSON.parse(line)))
+            .map((line) => this.codec.parse(JSON.parse(line)))
           if (values.length !== range.count)
             throw new Error('Invalid sealed range count')
           for (let i = 0; i < values.length; i++) {
-            if (
-              values[i].seq !== this.entries[range.start + i].boundary.afterSeq
+            this.codec.validateRead(
+              values[i],
+              this.entries[range.start + i].boundary
             )
-              throw new Error('Sealed range sequence mismatch')
           }
           loaded.set(range, values)
         }
@@ -229,6 +237,12 @@ export class ObjectShapeLog extends IndexedShapeLog {
     void this.#disposal.catch(() => {})
   }
 }
+export class ObjectShapeLog extends ObjectJsonLog<Envelope> {
+  constructor(options: ObjectLogOptions) {
+    super(options, shapeLogCodec)
+  }
+}
+
 function digest(bytes: Uint8Array): string {
   return createHash('sha256').update(bytes).digest('hex')
 }

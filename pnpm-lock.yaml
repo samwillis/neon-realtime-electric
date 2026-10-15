@@ -25,6 +25,9 @@ importers:
       '@durable-streams/server':
         specifier: 0.3.9
         version: 0.3.9
+      '@durable-streams/server-conformance-tests':
+        specifier: 0.3.7
+        version: 0.3.7(@types/node@24.10.1)(jiti@2.7.0)(jsdom@26.1.0)(tsx@4.20.6)(yaml@2.9.1)
       '@neon/config':
         specifier: 1.9.1
         version: 1.9.1
@@ -228,6 +231,11 @@ packages:
 
   '@durable-streams/client@0.2.7':
     resolution: {integrity: sha512-oxWbPEo8NO1Ruv9UgUVu3OswdE2z5ERhjccaujlpwe4tWuVd+Y/kdx+HtrkOnwN+bnRHTlxKYUNY8JTyrnhKew==}
+    engines: {node: '>=18.0.0'}
+    hasBin: true
+
+  '@durable-streams/server-conformance-tests@0.3.7':
+    resolution: {integrity: sha512-1hf14EuaTgLEgIxa5LBLl7623N87RV5zccLFpfCQhCioI3pYRX07k9XyIzAUFIT42U693HD4FUF+Lz9W+GQXVA==}
     engines: {node: '>=18.0.0'}
     hasBin: true
 
@@ -1825,6 +1833,33 @@ snapshots:
   '@durable-streams/client@0.2.7(patch_hash=86208472372ea89916b86060b78cd8d3b438e35a0d068f04bd3a763b266cc81b)':
     dependencies:
       '@microsoft/fetch-event-source': 2.0.1
+
+  '@durable-streams/server-conformance-tests@0.3.7(@types/node@24.10.1)(jiti@2.7.0)(jsdom@26.1.0)(tsx@4.20.6)(yaml@2.9.1)':
+    dependencies:
+      '@durable-streams/client': 0.2.7(patch_hash=86208472372ea89916b86060b78cd8d3b438e35a0d068f04bd3a763b266cc81b)
+      fast-check: 4.6.0
+      vitest: 4.0.15(@types/node@24.10.1)(jiti@2.7.0)(jsdom@26.1.0)(tsx@4.20.6)(yaml@2.9.1)
+    transitivePeerDependencies:
+      - '@edge-runtime/vm'
+      - '@opentelemetry/api'
+      - '@types/node'
+      - '@vitest/browser-playwright'
+      - '@vitest/browser-preview'
+      - '@vitest/browser-webdriverio'
+      - '@vitest/ui'
+      - happy-dom
+      - jiti
+      - jsdom
+      - less
+      - lightningcss
+      - msw
+      - sass
+      - sass-embedded
+      - stylus
+      - sugarss
+      - terser
+      - tsx
+      - yaml
 
   '@durable-streams/server@0.3.9':
     dependencies:

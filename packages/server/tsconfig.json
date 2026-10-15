@@ -7,6 +7,7 @@
     "src/**/*.ts",
     "../../tests/server/**/*.ts",
     "../../tests/integration/**/*.ts",
-    "../../tests/storage/**/*.ts"
+    "../../tests/storage/**/*.ts",
+    "../../tests/conformance/**/*.ts"
   ]
 }
