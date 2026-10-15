@@ -28,22 +28,16 @@
       "remaining": ""
     },
     "status_live_errors": {
-      "status": "partial",
-      "scope": "Native error/status boundaries have related coverage.",
-      "evidence": [
-        "tests/server/client-options.test.ts",
-        "tests/server/mobile-lifecycle.test.ts"
-      ],
-      "remaining": "Explicitly reproduce connection status across a failure during an already-live subscription, including resumption."
+      "status": "mapped",
+      "scope": "Disconnect during an already-live auth error and same-history resumption after asynchronous repair.",
+      "evidence": ["tests/server/client-lifecycle.test.ts"],
+      "remaining": ""
     },
     "unsubscribe": {
-      "status": "partial",
-      "scope": "Original unsubscribe assertions remain historical; native teardown has related coverage.",
-      "evidence": [
-        "packages/client/test/client.test.ts",
-        "tests/server/mobile-lifecycle.test.ts"
-      ],
-      "remaining": "Add a native delivery test that removes one callback while another stays subscribed and proves no further delivery to the removed callback."
+      "status": "mapped",
+      "scope": "Individual stream/Shape callback removal while other subscribers continue receiving changes.",
+      "evidence": ["tests/server/client-lifecycle.test.ts"],
+      "remaining": ""
     },
     "mobile": {
       "status": "mapped",
@@ -52,10 +46,10 @@
       "remaining": ""
     },
     "one_shot_status": {
-      "status": "partial",
-      "scope": "One-shot readiness and cancellation have native evidence.",
-      "evidence": ["tests/transport/shape-reader.test.ts"],
-      "remaining": "Assert the final public isConnected state after subscribe:false completes."
+      "status": "mapped",
+      "scope": "Completed subscribe:false readiness, disconnected status and retained public metadata.",
+      "evidence": ["tests/server/client-lifecycle.test.ts"],
+      "remaining": ""
     },
     "replica": {
       "status": "mapped",
@@ -76,13 +70,10 @@
       "remaining": ""
     },
     "unseen": {
-      "status": "partial",
-      "scope": "Original unseen-key filtering assertions remain historical; native changes-only behavior has related coverage.",
-      "evidence": [
-        "packages/client/test/client.test.ts",
-        "tests/server/shape-modes.test.ts"
-      ],
-      "remaining": "Reproduce unseen-key update/delete followed by insertion through production transport."
+      "status": "mapped",
+      "scope": "Changes-only unseen-key updates/deletes ignored until insertion through production transport.",
+      "evidence": ["tests/server/client-lifecycle.test.ts"],
+      "remaining": ""
     },
     "subsets": {
       "status": "pending",
@@ -146,22 +137,22 @@
       "remaining": ""
     },
     "quoted": {
-      "status": "partial",
-      "scope": "Identifier allowlisting and projection have controlled coverage.",
+      "status": "mapped",
+      "scope": "Explicit comma/quote-bearing projection excludes the space-bearing column; real baseline/live SQL comparison keeps one shape epoch in polling and SSE.",
       "evidence": [
-        "tests/server/definition.test.ts",
-        "tests/integration/type-matrix.test.ts"
+        "tests/integration/quoted-projection.test.ts",
+        "tests/integration/support/quoted-function.ts"
       ],
-      "remaining": "Add a real source case with comma/quote/space-bearing column identifiers, matching the original data assertions."
+      "remaining": ""
     },
     "terminal_errors": {
-      "status": "partial",
-      "scope": "Safe source rejection, public error propagation and terminal header errors.",
+      "status": "protocol-replaced",
+      "scope": "Real invalid SQL terminates the production client with safe native 400 JSON rather than Electric parser-location diagnostics.",
       "evidence": [
-        "tests/server/handler.test.ts",
-        "tests/server/client-options.test.ts"
+        "tests/integration/quoted-projection.test.ts",
+        "tests/integration/where-expressions.test.ts"
       ],
-      "remaining": "Native source-specific error bodies differ; add explicit consumed-response-body failure coverage and record expected native error shape."
+      "remaining": "Electric-specific parser-location JSON is not reproduced; authorized SQL passes directly to Realtime."
     },
     "resume_error": {
       "status": "mapped",
@@ -170,6 +161,12 @@
         "tests/transport/shape-reader.test.ts",
         "tests/transport/protocol.test.ts"
       ],
+      "remaining": ""
+    },
+    "consumed_response": {
+      "status": "mapped",
+      "scope": "Consumed/locked custom-fetch responses surface a terminal public FetchError without native network retries.",
+      "evidence": ["tests/server/client-lifecycle.test.ts"],
       "remaining": ""
     }
   },
@@ -646,7 +643,7 @@
       "file": "packages/client/test/integration.test.ts",
       "line": 964,
       "name": "should handle invalid requests by terminating stream (liveSSE=$liveSse)",
-      "group": "terminal_errors"
+      "group": "consumed_response"
     },
     {
       "file": "packages/client/test/integration.test.ts",

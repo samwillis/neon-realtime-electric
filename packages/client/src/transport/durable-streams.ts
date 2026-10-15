@@ -51,7 +51,7 @@ export class DurableStreamsTransport<T extends Row<unknown>>
     }
     request.signal.addEventListener('abort', abort, { once: true })
     if (request.signal.aborted) abort()
-    let resolutionFailure: { error: unknown } | undefined
+    let requestFailure: { error: unknown } | undefined
     // A response header can expose a handle before its body succeeds. Keep the
     // byte checkpoint unchanged until consumption succeeds, including on retry.
     const checkpoint =
@@ -73,7 +73,7 @@ export class DurableStreamsTransport<T extends Row<unknown>>
       } catch (error) {
         // User resolver exceptions belong to the common error handler. Abort
         // the native network retry loop instead of treating them as offline IO.
-        resolutionFailure = { error }
+        requestFailure = { error }
         controller.abort(error)
         throw error
       }
@@ -102,6 +102,20 @@ export class DurableStreamsTransport<T extends Row<unknown>>
       )
       const handle = response.headers.get('electric-handle')
       if (handle) observedHandle = handle
+      if (response.bodyUsed || response.body?.locked) {
+        // A custom-fetch contract failure cannot be repaired by network retries.
+        const error = new FetchError(
+          response.status,
+          undefined,
+          undefined,
+          Object.fromEntries(response.headers.entries()),
+          outward.toString(),
+          'Body is unusable: Body has already been read or is locked'
+        )
+        requestFailure = { error }
+        controller.abort(error)
+        throw error
+      }
       const normalized = normalizeHeaders(response)
       // Only queue metadata for a response actually returned to the reader.
       // If normalization throws, native fetch retries must not leave a stale
@@ -236,7 +250,7 @@ export class DurableStreamsTransport<T extends Row<unknown>>
         }
       })
       await session.closed
-      if (resolutionFailure) throw resolutionFailure.error
+      if (requestFailure) throw requestFailure.error
       // The pinned reader ends its SSE session when its three-short-connection
       // guard selects polling. Keep that decision across facade refreshes;
       // otherwise the outer SSE lifecycle starts three more native attempts.
@@ -251,7 +265,7 @@ export class DurableStreamsTransport<T extends Row<unknown>>
       // client's stale-cache loop guard or spin while the baseline is built.
       if (!this.#consumer!.state.ready) await pause(150, request.signal)
     } catch (error) {
-      if (resolutionFailure) throw resolutionFailure.error
+      if (requestFailure) throw requestFailure.error
       if (request.signal.aborted || error instanceof DurableAbortError)
         throw new FetchBackoffAbortError()
       if (error instanceof DurableFetchError) {

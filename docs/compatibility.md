@@ -10,7 +10,7 @@ local/staging test target, as agreed in `AGENTS.md`.
 | 1: internal transport boundary                | Passed                                 | HTTP adapter extracted; all 553 baseline checks, build/typecheck, packed consumers and 62-export declaration comparison pass                                                                                                            |
 | 2: real Durable Streams delivery              | Implemented; final gate audit pending  | Real reader/reference server; 59 native/protocol tests, 18 packed proxy tests, consumer/lifecycle conformance and clean patch install; early real staging/Function no-reader lifecycle now passes                                       |
 | 3: real staging Realtime                      | Implemented in part; live gate passed  | Pinned SDK evidence patch, source adapter, serialized owner and WHERE passthrough; real baseline/live publications and transaction evidence pass after enabling logical replication; see docs/staging-publication-investigation.md |
-| 4: Function handler and lifecycle             | Implemented in part; gates outstanding | Fetch read/HEAD/DELETE/long-poll/SSE handler, 164 server checks; selected native JSON read/store conformance passes; staging snapshot/lifecycle through `neon dev` and controlled owner routing pass; final gate audit outstanding |
+| 4: Function handler and lifecycle             | Implemented in part; gates outstanding | Fetch read/HEAD/DELETE/long-poll/SSE handler, 212 server checks; selected native JSON read/store conformance passes; staging snapshot/lifecycle through `neon dev` and controlled owner routing pass; final gate audit outstanding |
 | 5: Object Storage                             | Implemented in part; gates outstanding | Shared memory/object index and replay tests, real S3 SDK/HTTP fixture, live staging Object Storage replay/cleanup pass; local object-backed baseline/lifecycle pass; real local 15-minute expiry/refetch run passes                        |
 | 6: replacement package/integrations           | Implemented; gate audit pending        | Fresh packed original/candidate React/TanStack builds and TS 5.5/5.9 compilation; Chrome baseline/live/auth/refetch and optimistic real tx acknowledgement pass                                                                         |
 | 7: complete API expansion                     | Implemented in part                                | SSE, replica modes, changes-only/now, WHERE passthrough, expanded real type matrix and native-reader mobile lifecycle gates implemented; complete types/events, subsets and exact MVCC/cut reconciliation remain                                                                                                                   |
@@ -37,9 +37,9 @@ HTTP adapter. Real Neon source and local lifecycle evidence is recorded below.
 [`upstream/service-test-dispositions.json`](../upstream/service-test-dispositions.json)
 against the actual baseline exclusions and pinned source. It discovers fixture
 aliases, chained `for`/`each` calls and BigInt fixtures, rather than counting only
-direct `it(...)` calls. All 87 declarations have a disposition: 46 mapped to
-candidate evidence, nine with partial coverage, 24 pending subset behavior and
-eight replaced at the native protocol/fixture boundary. These are declarations,
+direct `it(...)` calls. All 87 declarations have a disposition: 53 mapped to
+candidate evidence, one with partial coverage, 24 pending subset behavior and
+nine replaced at the native protocol/fixture boundary. These are declarations,
 not executed or expanded parameterized case counts.
 
 Each group records its scope, evidence references and remaining work. The check
@@ -384,7 +384,7 @@ logs and native/Electric-only response headers. Every native SSE reconnect keeps
 both Electric SSE query flags. Three genuinely short connections select polling;
 that decision survives a forced refresh of the same handle and resets after
 owner loss. Refresh-aborted connections do not count toward the threshold.
-The server suite now has 164 checks.
+That checkpoint had 164 server checks; the lifecycle checks below bring the suite to 212.
 
 These tests found two adapter defects: reconnects lost their SSE flags, and the
 facade restarted SSE after the pinned reader ended its session on fallback.
@@ -400,3 +400,39 @@ checks, the selected 64-check native JSON profile, packed aliases/interoperabili
 resume, polling/SSE mode checks and all eight basic/custom/React/TanStack browser
 scenarios, including auth refresh, live writes and refetch. This remains local
 Function evidence, with no deployed affinity claim.
+
+
+## Native client lifecycle and quoted projection
+
+Forty-eight production reader/handler checks cover individual stream and Shape
+subscriber removal, completed one-shot connection status, same-handle recovery
+from a live authentication failure, consumed/locked custom-fetch response errors,
+and changes-only unseen-key filtering. Every case runs with polling/SSE,
+memory/object logs and native/Electric-only response headers. These tests use
+controlled source events; they establish client behavior rather than additional
+Realtime SQL support.
+
+A custom fetch returning an already consumed or locked response now surfaces the
+public `FetchError` without a network retry loop. The adapter records the observed
+handle before checking the body and advances no committed offset for the failed
+response. Existing normalization-retry tests still verify reuse of that handle.
+
+Four real staging checks run a dedicated Function locally with `neon dev`.
+Explicit projection of comma/quote-bearing column names excludes the unselected
+space-bearing column. Polling and SSE baseline/live results agree with independent
+SQL after real MVCC transaction acknowledgement and retain the original handle,
+origin, path and query parameters. Invalid SQL terminates with a public
+`FetchError`, status 400 and safe native JSON
+`{ "error": "Realtime rejected the shape query" }`. Electric's parser-location
+JSON is an explicit protocol replacement; no local SQL parser is introduced.
+
+Run this credentialed gate with:
+
+```sh
+node --env-file=.env.local node_modules/vitest/vitest.mjs run --config vitest.staging.config.ts tests/integration/quoted-projection.test.ts
+```
+
+The Function allowlist uses an isolated test schema supplied only to the child
+process. CLI output stays in ignored staging artifacts, and teardown removes the
+test schema and stops the local Function. This does not establish deployed
+request affinity or extend the remaining type, dependency and subset gates.

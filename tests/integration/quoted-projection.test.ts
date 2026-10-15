@@ -1,0 +1,240 @@
+import { randomUUID } from 'node:crypto'
+import { spawn, type ChildProcess } from 'node:child_process'
+import { createWriteStream } from 'node:fs'
+import { mkdir } from 'node:fs/promises'
+import { createServer } from 'node:net'
+import { once } from 'node:events'
+import { Client } from 'pg'
+import { afterAll, beforeAll, expect, it } from 'vitest'
+import {
+  FetchError,
+  Shape,
+  ShapeStream,
+  isControlMessage,
+  isVisibleInSnapshot,
+  type PostgresSnapshot,
+} from '../../packages/client/src/index.js'
+
+const schema = `electric_quoted_${randomUUID().replaceAll('-', '')}`
+const table = `"${schema}".items`
+let client: Client
+let child: ChildProcess | undefined
+let origin: string
+let output: ReturnType<typeof createWriteStream>
+
+beforeAll(async () => {
+  if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is required')
+  client = new Client({
+    connectionString: process.env.DATABASE_URL,
+    connectionTimeoutMillis: 15_000,
+    query_timeout: 15_000,
+  })
+  await client.connect()
+  await client.query(`create schema "${schema}"`)
+  await client.query(`create table ${table} (
+    id int primary key, normal text, "has,comma" text,
+    "has""quote" text, "has space" text)`)
+  await mkdir('.artifacts/staging', { recursive: true })
+  output = createWriteStream('.artifacts/staging/quoted-function.log')
+  const socket = createServer()
+  socket.listen(0, '127.0.0.1')
+  await once(socket, 'listening')
+  const port = (socket.address() as { port: number }).port
+  await new Promise<void>((resolve) => socket.close(() => resolve()))
+  origin = `http://127.0.0.1:${port}`
+  child = spawn(
+    'neon',
+    [
+      ...(process.env.NEON_CLI_PROFILE
+        ? ['--profile', process.env.NEON_CLI_PROFILE]
+        : []),
+      'dev',
+      '--source',
+      'tests/integration/support/quoted-function.ts',
+      '--port',
+      String(port),
+    ],
+    {
+      env: { ...process.env, NEON_TEST_QUOTED_SCHEMA: schema },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    }
+  )
+  child.stdout!.pipe(output, { end: false })
+  child.stderr!.pipe(output, { end: false })
+  let startupError: Error | undefined
+  child.once('error', (error) => {
+    startupError = error
+  })
+  const deadline = Date.now() + 25_000
+  while (Date.now() < deadline) {
+    if (startupError) throw startupError
+    if (child.exitCode !== null || child.signalCode !== null)
+      throw new Error('neon dev exited before readiness')
+    try {
+      // HEAD validates the definition without creating a source owner.
+      const response = await fetch(`${origin}/proxy/shapes?table=items`, {
+        method: 'HEAD',
+        signal: AbortSignal.timeout(1000),
+      })
+      if (response.status === 404) return
+    } catch {
+      /* Server is still starting. */
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100))
+  }
+  throw new Error('neon dev did not become ready')
+}, 35_000)
+
+afterAll(async () => {
+  if (child && child.exitCode === null && child.signalCode === null) {
+    child.kill('SIGTERM')
+    await Promise.race([
+      once(child, 'exit'),
+      new Promise<void>((resolve) => {
+        const timer = setTimeout(() => {
+          child!.kill('SIGKILL')
+          resolve()
+        }, 5000)
+        timer.unref()
+      }),
+    ])
+  }
+  output?.end()
+  try {
+    await client?.query(`drop schema if exists "${schema}" cascade`)
+  } finally {
+    await client?.end()
+  }
+})
+
+it.each([false, true])(
+  'projects comma/quote/space identifiers with stable incremental history (SSE=%s)',
+  async (liveSse) => {
+    await client.query(`truncate ${table}`)
+    await client.query(
+      `insert into ${table} values(1,'initial','comma','quote','excluded')`
+    )
+    const abort = new AbortController()
+    const errors: Error[] = []
+    const handles = new Set<string>()
+    const requests: URL[] = []
+    const columns = ['id', 'normal', 'has,comma', 'has"quote']
+    let snapshot: PostgresSnapshot | undefined
+    const stream = new ShapeStream({
+      url: `${origin}/proxy/shapes?tenant=a%2Bb`,
+      params: { table: 'items', columns },
+      liveSse,
+      signal: abort.signal,
+      fetchClient: async (input, init) => {
+        const request = new Request(input, init)
+        requests.push(new URL(request.url))
+        expect(request.method).toBe('GET')
+        const response = await fetch(request)
+        const handle = response.headers.get('electric-handle')
+        if (handle) handles.add(handle)
+        return response
+      },
+      onError(error) {
+        errors.push(error)
+      },
+    })
+    const shape = new Shape(stream)
+    stream.subscribe((messages) => {
+      for (const message of messages)
+        if (
+          isControlMessage(message) &&
+          message.headers.control === 'snapshot-end'
+        )
+          snapshot = message.headers
+    })
+    const compare = async (txid?: `${bigint}`) => {
+      await expect
+        .poll(
+          () => {
+            if (errors.length) throw errors[0]
+            return (
+              shape.isUpToDate &&
+              !!snapshot &&
+              (!txid || isVisibleInSnapshot(txid, snapshot))
+            )
+          },
+          { timeout: 20_000, interval: 50 }
+        )
+        .toBe(true)
+      const expected = (
+        await client.query(
+          `select id, normal, "has,comma", "has""quote" from ${table} order by id`
+        )
+      ).rows
+      expect(shape.currentRows).toEqual(expected)
+      expect(shape.currentRows[0]).not.toHaveProperty('has space')
+      expect(handles.size).toBe(1)
+    }
+    try {
+      await compare()
+      const handle = stream.shapeHandle
+      const changed = await client.query(`update ${table}
+        set normal='updated', "has,comma"='comma updated', "has""quote"='quote updated', "has space"='still excluded'
+        where id=1 returning pg_current_xact_id()::text as txid`)
+      await compare(changed.rows[0].txid)
+      expect(stream.shapeHandle).toBe(handle)
+      expect(errors).toEqual([])
+      for (const request of requests) {
+        expect(request.origin).toBe(origin)
+        expect(request.pathname).toBe('/proxy/shapes')
+        expect(request.searchParams.get('tenant')).toBe('a+b')
+        if (request.searchParams.has('handle'))
+          expect(request.searchParams.get('handle')).toBe(handle)
+      }
+    } finally {
+      abort.abort()
+      stream.unsubscribeAll()
+      if (stream.shapeHandle) {
+        const cleanup = new URL(`${origin}/proxy/shapes`)
+        cleanup.searchParams.set('table', 'items')
+        cleanup.searchParams.set(
+          'columns',
+          columns.map((c) => `"${c.replaceAll('"', '""')}"`).join(',')
+        )
+        cleanup.searchParams.set('handle', stream.shapeHandle)
+        await fetch(cleanup, {
+          method: 'DELETE',
+          signal: AbortSignal.timeout(5000),
+        })
+      }
+    }
+  }
+)
+
+it.each([false, true])(
+  'terminates invalid SQL with the safe native public error contract (SSE=%s)',
+  async (liveSse) => {
+    const abort = new AbortController()
+    const handled: Error[] = []
+    const stream = new ShapeStream({
+      url: `${origin}/proxy/shapes`,
+      params: { table: 'items', where: '1 x 1' },
+      liveSse,
+      signal: abort.signal,
+      onError(error) {
+        handled.push(error)
+      },
+    })
+    try {
+      const failure = await new Promise<Error>((resolve) =>
+        stream.subscribe(() => {}, resolve)
+      )
+      expect(failure).toBeInstanceOf(FetchError)
+      expect((failure as FetchError).status).toBe(400)
+      expect((failure as FetchError).json).toEqual({
+        error: 'Realtime rejected the shape query',
+      })
+      expect(stream.error).toBe(failure)
+      expect(stream.isConnected()).toBe(false)
+      expect(handled).toEqual([failure])
+    } finally {
+      abort.abort()
+      stream.unsubscribeAll()
+    }
+  }
+)
