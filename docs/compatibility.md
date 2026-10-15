@@ -4,16 +4,31 @@ Target: the full implementation plan through phase 7. No phase is complete until
 its exit evidence is recorded. Deferred platform affinity is outside the current
 local/staging test target, as agreed in `AGENTS.md`.
 
-| Phase                                         | Status                                 | Evidence / remaining gate                                                                                                                                                                                                               |
-| --------------------------------------------- | -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 0: pristine import and compatibility baseline | Passed                                 | 80-file pinned import; 78 unchanged-file checks; build/typecheck; 553 runtime/declaration checks; identical packed consumers on TS 5.5.4/5.9.3; 62 exports across four declaration entry points                                         |
-| 1: internal transport boundary                | Passed                                 | HTTP adapter extracted; all 553 baseline checks, build/typecheck, packed consumers and 62-export declaration comparison pass                                                                                                            |
-| 2: real Durable Streams delivery              | Implemented; final gate audit pending  | Real reader/reference server; 59 native/protocol tests, 18 packed proxy tests, consumer/lifecycle conformance and clean patch install; early real staging/Function no-reader lifecycle now passes                                       |
-| 3: real staging Realtime                      | Implemented in part; live gate passed  | Pinned SDK evidence patch, source adapter, serialized owner and WHERE passthrough; real baseline/live publications and transaction evidence pass after enabling logical replication; see docs/staging-publication-investigation.md |
-| 4: Function handler and lifecycle             | Implemented in part; gates outstanding | Fetch read/HEAD/DELETE/long-poll/SSE handler, 256 server checks; selected native JSON read/store conformance passes; staging snapshot/lifecycle through `neon dev` and controlled owner routing pass; final gate audit outstanding |
-| 5: Object Storage                             | Implemented in part; gates outstanding | Shared memory/object index and replay tests, real S3 SDK/HTTP fixture, live staging Object Storage replay/cleanup pass; local object-backed baseline/lifecycle pass; real local 15-minute expiry/refetch run passes                        |
-| 6: replacement package/integrations           | Implemented; gate audit pending        | Fresh packed original/candidate React/TanStack builds and TS 5.5/5.9 compilation; Chrome baseline/live/auth/refetch and optimistic real tx acknowledgement pass                                                                         |
-| 7: complete API expansion                     | Implemented in part                                | SSE, replica modes, changes-only/now, WHERE passthrough, expanded real type matrix and native-reader mobile lifecycle gates implemented; complete types/events, subsets and exact MVCC/cut reconciliation remain                                                                                                                   |
+| Phase | Status | Exit evidence |
+| --- | --- | --- |
+| 0: pristine import and compatibility baseline | Passed | 80-file pinned import; 78 original non-adapted blobs verified at `eeaa869`; 553 runtime/declaration checks; packed TS 5.5.4/5.9.3 consumers; 62 exports across four declaration entry points |
+| 1: internal transport boundary | Passed | Reference HTTP adapter preserves the baseline checks, packed consumers and public declarations |
+| 2: real Durable Streams delivery | Passed for the local eager gate | Real reader/reference server; 59 transport and 18 packed proxy checks; early initialization/resume, replay, refetch and synthetic logical-cut ordering |
+| 3: real staging Realtime | Passed for the local eager gate | Real baseline/live agreement with SQL, writes during delayed baseline delivery, filter transitions and ordered MVCC transaction acknowledgements |
+| 4: Function handler and lifecycle | Passed for the local eager gate | 256 server checks; selected 64-check native JSON read/store conformance profile; real local Function lifecycle and controlled owner routing |
+| 5: Object Storage | Passed for the local eager gate | Memory/object replay and fault checks; real Object Storage replay/cleanup; controlled owner loss and a real 15-minute local Function expiry/refetch run |
+| 6: replacement package/integrations | Passed for the local eager gate | Packed aliases and original React/TanStack packages compile/build; eight browser modes pass; 16 cross-package materializer scenarios pass |
+| 7: complete API expansion | Incomplete | SSE, replica modes, changes-only/now, WHERE passthrough, strict type profile and controlled mobile lifecycle pass; full type/event, dependency and subset gates remain open |
+
+These statuses assess each phase's stated exit, not every later feature. The
+phase 2 synthetic cut test does not implement subsets. Phase 3 proves the eager
+source cases, not arbitrary SQL support. Phase 4 covers the selected shape JSON
+read/store profile, not the entire Durable Streams server specification. The
+local phase 6 eager gate has no skipped required tests; historical subset cases
+remain pending under phase 7. Platform affinity, eviction and background lifetime
+remain deferred, and no deployed Function behavior is claimed.
+
+The latest real Function type/quoted-projection tests (12), source tests (two)
+and performance scenarios (eight) also pass with both runner and Function on
+Node 24.10.0. See [type evidence](./type-and-mobile-evidence.md) and
+[local performance](./local-performance.md). The separate real 15-minute expiry
+run used Node 22.23.2. Generated reports and private backend findings remain
+ignored and uncommitted.
 
 ## Upstream test disposition
 

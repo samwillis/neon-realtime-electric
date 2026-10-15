@@ -32,6 +32,13 @@ value. Int8 precision, microseconds, bytea hex, JSON nulls, array escaping and
 non-finite floats are retained. Generated evidence includes original wire frames,
 baseline counts, operations and checkpoints under ignored `.artifacts/staging`.
 
+The real Function matrix also passes with the runner and every Function on
+Node 24.10.0, covering the eight type scenarios plus four quoted-column/error
+scenarios. Runner versions are recorded in the type JSON reports; each Function
+prints its runtime version only to the ignored CLI log. These tests previously
+passed on Node 22.23.2 as well. This is behavioral evidence, not a performance
+comparison between runtimes.
+
 All eight type scenarios now start the production Fetch handler in a separate
 Function process with `neon dev`, using an isolated configured-table allowlist.
 The runner records original Realtime frames through a transparent local relay,

@@ -4,7 +4,7 @@
 
 The complete pinned import, license, manifest and reproduction command are
 documented in `packages/client/UPSTREAM.md`. The original source/test baseline is
-commit `133f2b1`. The import script checks all untouched files and names locally
+commit `eeaa869`. The import script checks all untouched files and names locally
 modified source files explicitly; it never silently updates the pinned revision.
 
 The first implementation change extracts an internal transport contract from

@@ -1,9 +1,10 @@
 # Local performance evidence
 
-The eight-scenario run on 15 October 2026 passed against the Function running
-under `neon dev`, real staging Postgres/Realtime and real Neon Object Storage.
-Both the runner and Function used Node 22.23.2. Node 24 remains the intended
-server target; these measurements do not establish its performance.
+The latest eight-scenario run on 16 October 2026 passed against the Function
+running under `neon dev`, real staging Postgres/Realtime and real Neon Object
+Storage. Both runner and Function used Node 24.10.0; the Function startup
+record verifies its runtime version. An earlier run used Node 22.23.2. These
+separate local runs are not a controlled comparison between Node versions.
 
 Each scenario uses a primary-keyed int4/text/bool table, full replica mode,
 512-character ASCII labels and eight sequential updates. Readers share one
@@ -11,16 +12,16 @@ query-string handle. The runner verifies every baseline cell, live rows and real
 transaction acknowledgements, compares final rows with independent SQL, replays
 from a saved offset and measures refetch after deleting the old owner.
 
-| Rows | Readers | Mode | Baseline ms | Live p95 ms | Warm fan-out ms | Delta replay ms | Refetch ms | Peak RSS MiB | Object GETs |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1,000 | 1 | Poll | 1,476 | 116 | — | 1,187 | 1,276 | 80 | 1 |
-| 1,000 | 5 | Poll | 1,273 | 119 | 1,095 | 2 | 1,264 | 104 | 8 |
-| 1,000 | 1 | SSE | 1,273 | 113 | — | 151 | 1,290 | 110 | 1 |
-| 1,000 | 5 | SSE | 1,120 | 112 | 2,072 | 454 | 1,114 | 123 | 9 |
-| 5,000 | 1 | Poll | 1,602 | 113 | — | 138 | 1,615 | 139 | 1 |
-| 5,000 | 5 | Poll | 1,449 | 112 | 2,576 | 169 | 1,609 | 172 | 53 |
-| 5,000 | 1 | SSE | 1,458 | 127 | — | 133 | 1,588 | 167 | 1 |
-| 5,000 | 5 | SSE | 1,584 | 111 | 2,516 | 142 | 1,461 | 181 | 53 |
+| Rows  | Readers | Mode | Baseline ms | Live p95 ms | Warm fan-out ms | Delta replay ms | Refetch ms | Peak RSS MiB | Object GETs |
+| ----- | ------- | ---- | ----------- | ----------- | --------------- | --------------- | ---------- | ------------ | ----------- |
+| 1,000 | 1       | Poll | 1,284       | 140         | —               | 606             | 1,421      | 98           | 1           |
+| 1,000 | 5       | Poll | 1,266       | 240         | 2,728           | 381             | 2,508      | 118          | 9           |
+| 1,000 | 1       | SSE  | 1,425       | 113         | —               | 158             | 1,262      | 130          | 1           |
+| 1,000 | 5       | SSE  | 1,406       | 115         | 1,151           | 4               | 1,274      | 138          | 8           |
+| 5,000 | 1       | Poll | 1,606       | 112         | —               | 140             | 1,748      | 185          | 1           |
+| 5,000 | 5       | Poll | 1,615       | 119         | 2,645           | 184             | 1,628      | 272          | 53          |
+| 5,000 | 1       | SSE  | 1,582       | 112         | —               | 147             | 1,589      | 288          | 1           |
+| 5,000 | 5       | SSE  | 1,603       | 117         | 2,839           | 143             | 1,585      | 312          | 53          |
 
 Baseline means first usable snapshot. Live latency starts before the SQL update
 call and ends when every reader has installed and acknowledged that write; it
@@ -28,17 +29,18 @@ includes the database round trip. With eight observations, p95 is the maximum.
 Warm fan-out starts additional readers only after baseline offload; their reads
 must exercise stored objects. Object GET counts include replay and refetch.
 
-Baseline offload took another 0.4–1.5 seconds at 1,000 rows and 2.6–2.8 seconds
-at 5,000 rows. Two sealed ranges left about 160 KiB of resident log at 1,000 rows;
-13 ranges left about 6 KiB at 5,000 rows. The owner still retained all raw rows
-for classification. Eight updates added about 10.8 KiB of log per scenario.
-Successful object uploads transferred 0.69/3.45 MB per scenario, including the
-replacement baseline. Bytes divided by summed upload service time ranged from
-0.41 to 1.24 MB/s; this is a request-service measurement, not end-to-end capacity.
+Baseline offload took another 0.3–0.9 seconds at 1,000 rows and 3.0–3.2
+seconds at 5,000 rows. Resident log bytes after sealing were about 160 KiB at
+1,000 rows and 6 KiB at 5,000 rows; the owner still retained raw rows for
+classification. Eight updates added about 10.8 KiB of log per scenario.
+Successful object uploads transferred 0.69 MB at 1,000 rows and 3.45–3.72 MB
+at 5,000 rows, including the replacement baseline. Bytes divided by summed
+upload service time ranged from 0.60 to 1.26 MB/s; this is a request-service
+measurement, not end-to-end capacity.
 
-There were no unexpected storage failures. Each scenario cancelled one upload
-when deleting an owner. The runner waited for all test handles and pending object
-cleanups to disappear, and verified deletion of its database rows.
+There were no unexpected storage failures. Each scenario cancelled one or two
+uploads when deleting owners. The runner waited for all test handles and pending
+object cleanups to disappear, and verified deletion of its database rows.
 
 These are local-to-staging timings with one owner and at most five readers,
 5,000 rows and eight sequential writes. Baseline, fan-out and refetch fit well

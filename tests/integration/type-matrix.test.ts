@@ -618,6 +618,7 @@ for (const profile of ['incremental', 'extended'] as const) {
             `.artifacts/staging/types-${profile}-${replica}-${liveSse ? 'sse' : 'poll'}.json`,
             JSON.stringify(
               {
+                nodeVersion: process.version,
                 columns: cases.map(({ name, sqlType, type }) => ({
                   name,
                   sqlType,

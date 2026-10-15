@@ -28,7 +28,7 @@ Workspace adaptations at the initial import:
   retained and tracked in `docs/compatibility.md`.
 
 The original package is an isolated test oracle, never a runtime dependency of
-this fork. Commit `133f2b1` is the verified pristine source/test baseline.
+this fork. Commit `eeaa869` is the verified pristine source/test baseline.
 
 ## Phase 1 transport boundary
 

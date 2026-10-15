@@ -12,6 +12,7 @@ function required(name: string): string {
 }
 // Test-only allowlist. The runner supplies isolated schema/column definitions;
 // no request can select an unconfigured table or change this configuration.
+console.log(`Integration Function runtime: ${process.version}`)
 const tables = JSON.parse(
   required('NEON_TEST_SHAPE_CONFIG')
 ) as ConfiguredTable[]
