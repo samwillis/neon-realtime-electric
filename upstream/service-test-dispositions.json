@@ -1,0 +1,700 @@
+{
+  "version": 1,
+  "revision": "3f9809fb0bd894cb74470d434749673492ad7acf",
+  "files": [
+    "packages/client/test/client.test.ts",
+    "packages/client/test/integration.test.ts",
+    "packages/client/test/cache.test.ts"
+  ],
+  "groups": {
+    "eager": {
+      "status": "mapped",
+      "scope": "Eager baseline, notification, live rows and handle/offset lifecycle.",
+      "evidence": [
+        "tests/transport/shape-reader.test.ts",
+        "tests/server/handler.test.ts",
+        "tests/compatibility/interop/runtime.mjs",
+        "scripts/test-local-lifecycle.ts"
+      ],
+      "remaining": ""
+    },
+    "options": {
+      "status": "mapped",
+      "scope": "Public error/async retry forms, header/param preservation, parser/mapper/transformer order and initial/recovered status.",
+      "evidence": [
+        "tests/server/client-options.test.ts",
+        "tests/transport/shape-reader.test.ts"
+      ],
+      "remaining": ""
+    },
+    "status_live_errors": {
+      "status": "partial",
+      "scope": "Native error/status boundaries have related coverage.",
+      "evidence": [
+        "tests/server/client-options.test.ts",
+        "tests/server/mobile-lifecycle.test.ts"
+      ],
+      "remaining": "Explicitly reproduce connection status across a failure during an already-live subscription, including resumption."
+    },
+    "unsubscribe": {
+      "status": "partial",
+      "scope": "Original unsubscribe assertions remain historical; native teardown has related coverage.",
+      "evidence": [
+        "packages/client/test/client.test.ts",
+        "tests/server/mobile-lifecycle.test.ts"
+      ],
+      "remaining": "Add a native delivery test that removes one callback while another stays subscribed and proves no further delivery to the removed callback."
+    },
+    "mobile": {
+      "status": "mapped",
+      "scope": "Background/foreground and wake pause/resume through the real reader.",
+      "evidence": ["tests/server/mobile-lifecycle.test.ts"],
+      "remaining": ""
+    },
+    "one_shot_status": {
+      "status": "partial",
+      "scope": "One-shot readiness and cancellation have native evidence.",
+      "evidence": ["tests/transport/shape-reader.test.ts"],
+      "remaining": "Assert the final public isConnected state after subscribe:false completes."
+    },
+    "replica": {
+      "status": "mapped",
+      "scope": "Default/full projection and old changed values.",
+      "evidence": [
+        "tests/server/shape-modes.test.ts",
+        "tests/integration/type-matrix.test.ts"
+      ],
+      "remaining": ""
+    },
+    "modes": {
+      "status": "mapped",
+      "scope": "Cold changes-only/now boundaries and subsequent update classification.",
+      "evidence": [
+        "tests/server/shape-modes.test.ts",
+        "scripts/test-local-modes.ts"
+      ],
+      "remaining": ""
+    },
+    "unseen": {
+      "status": "partial",
+      "scope": "Original unseen-key filtering assertions remain historical; native changes-only behavior has related coverage.",
+      "evidence": [
+        "packages/client/test/client.test.ts",
+        "tests/server/shape-modes.test.ts"
+      ],
+      "remaining": "Reproduce unseen-key update/delete followed by insertion through production transport."
+    },
+    "subsets": {
+      "status": "pending",
+      "scope": "Subset API execution, injection, ordering, metadata and reconciliation.",
+      "evidence": [],
+      "remaining": "Runtime subset gate remains open; retain these assertions for implementation after the source contract is available."
+    },
+    "sse": {
+      "status": "mapped",
+      "scope": "Native SSE event framing, reconnect, refresh, refetch and mode flags.",
+      "evidence": [
+        "tests/server/sse.test.ts",
+        "tests/server/sse-fallback.test.ts"
+      ],
+      "remaining": ""
+    },
+    "fixture_setup": {
+      "status": "protocol-replaced",
+      "scope": "Original Electric service database fixture sanity check.",
+      "evidence": ["tests/integration/realtime-source.test.ts"],
+      "remaining": "Neon tests use independent isolated schemas and SQL comparisons; the original fixture remains an unrun reference."
+    },
+    "types": {
+      "status": "partial",
+      "scope": "Expanded real encoding/parser/type comparisons.",
+      "evidence": [
+        "tests/integration/type-matrix.test.ts",
+        "docs/type-and-mobile-evidence.md"
+      ],
+      "remaining": "Full incremental type/event and edge-case equivalence remains an open phase 7 gate."
+    },
+    "delivery": {
+      "status": "mapped",
+      "scope": "Serialized consumption, fan-out, offline replay and backpressure.",
+      "evidence": [
+        "tests/transport/reader-lifecycle.test.ts",
+        "tests/transport/protocol.test.ts",
+        "tests/server/object-log.test.ts",
+        "scripts/test-local-performance.mjs"
+      ],
+      "remaining": ""
+    },
+    "cache": {
+      "status": "protocol-replaced",
+      "scope": "Electric HTTP cache/ETag/nginx assertions are historical; production serves the selected native JSON no-store policy.",
+      "evidence": [
+        "tests/conformance/json-profile.test.ts",
+        "docs/native-server-conformance.md",
+        "tests/compatibility/proxies/runtime.test.ts"
+      ],
+      "remaining": "No claim of Electric cache-header, ETag/304 or nginx cache-collapse equivalence. Native conformance scope is explicitly selected."
+    },
+    "filter": {
+      "status": "mapped",
+      "scope": "Authorized WHERE passthrough, projection and membership changes.",
+      "evidence": [
+        "tests/server/definition.test.ts",
+        "tests/integration/where-expressions.test.ts",
+        "scripts/test-local-lifecycle.ts"
+      ],
+      "remaining": ""
+    },
+    "quoted": {
+      "status": "partial",
+      "scope": "Identifier allowlisting and projection have controlled coverage.",
+      "evidence": [
+        "tests/server/definition.test.ts",
+        "tests/integration/type-matrix.test.ts"
+      ],
+      "remaining": "Add a real source case with comma/quote/space-bearing column identifiers, matching the original data assertions."
+    },
+    "terminal_errors": {
+      "status": "partial",
+      "scope": "Safe source rejection, public error propagation and terminal header errors.",
+      "evidence": [
+        "tests/server/handler.test.ts",
+        "tests/server/client-options.test.ts"
+      ],
+      "remaining": "Native source-specific error bodies differ; add explicit consumed-response-body failure coverage and record expected native error shape."
+    },
+    "resume_error": {
+      "status": "mapped",
+      "scope": "A failed/truncated response cannot advance the committed checkpoint; recovery uses the observed handle and prior offset.",
+      "evidence": [
+        "tests/transport/shape-reader.test.ts",
+        "tests/transport/protocol.test.ts"
+      ],
+      "remaining": ""
+    }
+  },
+  "cases": [
+    {
+      "file": "packages/client/test/client.test.ts",
+      "line": 27,
+      "name": "should sync an empty shape",
+      "group": "eager"
+    },
+    {
+      "file": "packages/client/test/client.test.ts",
+      "line": 46,
+      "name": "should throw on a reserved parameter",
+      "group": "options"
+    },
+    {
+      "file": "packages/client/test/client.test.ts",
+      "line": 62,
+      "name": "should notify with the initial value",
+      "group": "eager"
+    },
+    {
+      "file": "packages/client/test/client.test.ts",
+      "line": 90,
+      "name": "should transform record with transformer function",
+      "group": "options"
+    },
+    {
+      "file": "packages/client/test/client.test.ts",
+      "line": 122,
+      "name": "should continually sync a shape/table",
+      "group": "eager"
+    },
+    {
+      "file": "packages/client/test/client.test.ts",
+      "line": 190,
+      "name": "should resync from scratch on a shape rotation",
+      "group": "eager"
+    },
+    {
+      "file": "packages/client/test/client.test.ts",
+      "line": 268,
+      "name": "should notify subscribers when the value changes",
+      "group": "eager"
+    },
+    {
+      "file": "packages/client/test/client.test.ts",
+      "line": 313,
+      "name": "should support unsubscribe",
+      "group": "unsubscribe"
+    },
+    {
+      "file": "packages/client/test/client.test.ts",
+      "line": 334,
+      "name": "should expose connection status",
+      "group": "options"
+    },
+    {
+      "file": "packages/client/test/client.test.ts",
+      "line": 359,
+      "name": "should set isConnected to false on fetch error and back on true when fetch succeeds again",
+      "group": "status_live_errors"
+    },
+    {
+      "file": "packages/client/test/client.test.ts",
+      "line": 412,
+      "name": "should set isConnected to false when the stream is paused an back on true when the fetch succeeds again",
+      "group": "mobile"
+    },
+    {
+      "file": "packages/client/test/client.test.ts",
+      "line": 438,
+      "name": "should support pausing the stream and resuming it",
+      "group": "mobile"
+    },
+    {
+      "file": "packages/client/test/client.test.ts",
+      "line": 523,
+      "name": "should not throw error if an error handler is provided",
+      "group": "options"
+    },
+    {
+      "file": "packages/client/test/client.test.ts",
+      "line": 548,
+      "name": "should retry on error if error handler returns modified params",
+      "group": "options"
+    },
+    {
+      "file": "packages/client/test/client.test.ts",
+      "line": 603,
+      "name": "should retry on error if error handler returns modified headers",
+      "group": "options"
+    },
+    {
+      "file": "packages/client/test/client.test.ts",
+      "line": 650,
+      "name": "should support async error handler",
+      "group": "options"
+    },
+    {
+      "file": "packages/client/test/client.test.ts",
+      "line": 706,
+      "name": "should handle onError returning null without crashing",
+      "group": "options"
+    },
+    {
+      "file": "packages/client/test/client.test.ts",
+      "line": 736,
+      "name": "should handle onError returning only params (not headers)",
+      "group": "options"
+    },
+    {
+      "file": "packages/client/test/client.test.ts",
+      "line": 797,
+      "name": "should stop fetching and report an error if response is missing required headers",
+      "group": "options"
+    },
+    {
+      "file": "packages/client/test/client.test.ts",
+      "line": 871,
+      "name": "should treat MissingHeadersError as fatal and not retry even if onError returns {}",
+      "group": "options"
+    },
+    {
+      "file": "packages/client/test/client.test.ts",
+      "line": 927,
+      "name": "should set isConnected to false after fetch if not subscribed",
+      "group": "one_shot_status"
+    },
+    {
+      "file": "packages/client/test/client.test.ts",
+      "line": 948,
+      "name": "should expose isLoading status",
+      "group": "options"
+    },
+    {
+      "file": "packages/client/test/client.test.ts",
+      "line": 969,
+      "name": "should expose lastOffset",
+      "group": "eager"
+    },
+    {
+      "file": "packages/client/test/client.test.ts",
+      "line": 991,
+      "name": "should honour replica: full",
+      "group": "replica"
+    },
+    {
+      "file": "packages/client/test/client.test.ts",
+      "line": 1049,
+      "name": "should support function-based params and headers",
+      "group": "options"
+    },
+    {
+      "file": "packages/client/test/client.test.ts",
+      "line": 1101,
+      "name": "should support offset=now to skip historical data",
+      "group": "modes"
+    },
+    {
+      "file": "packages/client/test/client.test.ts",
+      "line": 1150,
+      "name": "should support forceDisconnectAndRefresh() to force a sync",
+      "group": "eager"
+    },
+    {
+      "file": "packages/client/test/client.test.ts",
+      "line": 1275,
+      "name": "should set isConnected to false on fetch error and back on true when fetch succeeds again",
+      "group": "status_live_errors"
+    },
+    {
+      "file": "packages/client/test/client.test.ts",
+      "line": 1313,
+      "name": "should handle SSE messages in batches",
+      "group": "sse"
+    },
+    {
+      "file": "packages/client/test/client.test.ts",
+      "line": 1519,
+      "name": "should expose mode on Shape",
+      "group": "modes"
+    },
+    {
+      "file": "packages/client/test/client.test.ts",
+      "line": 1532,
+      "name": "should start empty even when data exists",
+      "group": "modes"
+    },
+    {
+      "file": "packages/client/test/client.test.ts",
+      "line": 1552,
+      "name": "should propagate updates immediately as update messages",
+      "group": "modes"
+    },
+    {
+      "file": "packages/client/test/client.test.ts",
+      "line": 1587,
+      "name": "requestSnapshot completes without waiting for initial sync",
+      "group": "subsets"
+    },
+    {
+      "file": "packages/client/test/client.test.ts",
+      "line": 1613,
+      "name": "should not miss updates between cold-start snapshot and stream resume",
+      "group": "subsets"
+    },
+    {
+      "file": "packages/client/test/client.test.ts",
+      "line": 1664,
+      "name": "requestSnapshot should populate stream and match returned data",
+      "group": "subsets"
+    },
+    {
+      "file": "packages/client/test/client.test.ts",
+      "line": 1720,
+      "name": "requestSnapshot supports orderBy",
+      "group": "subsets"
+    },
+    {
+      "file": "packages/client/test/client.test.ts",
+      "line": 1745,
+      "name": "requestSnapshot supports where clause",
+      "group": "subsets"
+    },
+    {
+      "file": "packages/client/test/client.test.ts",
+      "line": 1771,
+      "name": "requestSnapshot supports parametrised where clause",
+      "group": "subsets"
+    },
+    {
+      "file": "packages/client/test/client.test.ts",
+      "line": 1798,
+      "name": "requestSnapshot supports orderBy + limit",
+      "group": "subsets"
+    },
+    {
+      "file": "packages/client/test/client.test.ts",
+      "line": 1823,
+      "name": "should stream updates after snapshot completes",
+      "group": "subsets"
+    },
+    {
+      "file": "packages/client/test/client.test.ts",
+      "line": 1860,
+      "name": "should wait for up-to-date message before pausing for snapshot",
+      "group": "subsets"
+    },
+    {
+      "file": "packages/client/test/client.test.ts",
+      "line": 1939,
+      "name": "should observe update committed after snapshot taken in parallel transaction",
+      "group": "subsets"
+    },
+    {
+      "file": "packages/client/test/client.test.ts",
+      "line": 1992,
+      "name": "should ignore updates/deletes for unseen keys until insert observed",
+      "group": "unseen"
+    },
+    {
+      "file": "packages/client/test/client.test.ts",
+      "line": 2076,
+      "name": "Shape.requestSnapshot should populate data and return void",
+      "group": "subsets"
+    },
+    {
+      "file": "packages/client/test/client.test.ts",
+      "line": 2108,
+      "name": "should re-execute requested sub-snapshots on must-refetch",
+      "group": "subsets"
+    },
+    {
+      "file": "packages/client/test/client.test.ts",
+      "line": 2161,
+      "name": "fetchSnapshot should return data and metadata without modifying shape state",
+      "group": "subsets"
+    },
+    {
+      "file": "packages/client/test/client.test.ts",
+      "line": 2251,
+      "name": "fetchSnapshot does not interfere with stream updates",
+      "group": "subsets"
+    },
+    {
+      "file": "packages/client/test/client.test.ts",
+      "line": 2314,
+      "name": "fetchSnapshot handles errors correctly",
+      "group": "subsets"
+    },
+    {
+      "file": "packages/client/test/client.test.ts",
+      "line": 2380,
+      "name": "fetchSnapshot handles 409 must-refetch errors gracefully",
+      "group": "subsets"
+    },
+    {
+      "file": "packages/client/test/client.test.ts",
+      "line": 2466,
+      "name": "fetchSnapshot throws after repeated 409s with same handle",
+      "group": "subsets"
+    },
+    {
+      "file": "packages/client/test/client.test.ts",
+      "line": 2538,
+      "name": "fetchSnapshot with POST method sends subset params in request body",
+      "group": "subsets"
+    },
+    {
+      "file": "packages/client/test/client.test.ts",
+      "line": 2595,
+      "name": "fetchSnapshot with subsetMethod POST uses POST by default",
+      "group": "subsets"
+    },
+    {
+      "file": "packages/client/test/client.test.ts",
+      "line": 2654,
+      "name": "fetchSnapshot method option overrides subsetMethod",
+      "group": "subsets"
+    },
+    {
+      "file": "packages/client/test/client.test.ts",
+      "line": 2712,
+      "name": "fetchSnapshot POST with params sends params in body",
+      "group": "subsets"
+    },
+    {
+      "file": "packages/client/test/client.test.ts",
+      "line": 2773,
+      "name": "requestSnapshot should handle BigInt values in params",
+      "group": "subsets"
+    },
+    {
+      "file": "packages/client/test/client.test.ts",
+      "line": 2804,
+      "name": "requestSnapshot should return properly parsed BigInt values from int8 columns",
+      "group": "subsets"
+    },
+    {
+      "file": "packages/client/test/client.test.ts",
+      "line": 2834,
+      "name": "fetchSnapshot POST should handle BigInt values in params",
+      "group": "subsets"
+    },
+    {
+      "file": "packages/client/test/client.test.ts",
+      "line": 2867,
+      "name": "should fall back to long polling after 3 consecutive short SSE connections",
+      "group": "sse"
+    },
+    {
+      "file": "packages/client/test/client.test.ts",
+      "line": 3004,
+      "name": "should reset SSE fallback state after shape rotation (409)",
+      "group": "sse"
+    },
+    {
+      "file": "packages/client/test/client.test.ts",
+      "line": 3158,
+      "name": "should not increment short connection counter for aborted SSE connections",
+      "group": "sse"
+    },
+    {
+      "file": "packages/client/test/integration.test.ts",
+      "line": 24,
+      "name": "sanity check",
+      "group": "fixture_setup"
+    },
+    {
+      "file": "packages/client/test/integration.test.ts",
+      "line": 31,
+      "name": "should work with empty shape/table (liveSSE=$liveSse)",
+      "group": "eager"
+    },
+    {
+      "file": "packages/client/test/integration.test.ts",
+      "line": 65,
+      "name": "should wait properly for updates on an empty shape/table (liveSSE=$liveSse)",
+      "group": "eager"
+    },
+    {
+      "file": "packages/client/test/integration.test.ts",
+      "line": 149,
+      "name": "returns a header with the server shape handle",
+      "group": "eager"
+    },
+    {
+      "file": "packages/client/test/integration.test.ts",
+      "line": 160,
+      "name": "returns a header with the chunk's last offset",
+      "group": "eager"
+    },
+    {
+      "file": "packages/client/test/integration.test.ts",
+      "line": 171,
+      "name": "should get initial data (liveSSE=$liveSse)",
+      "group": "eager"
+    },
+    {
+      "file": "packages/client/test/integration.test.ts",
+      "line": 208,
+      "name": "should parse incoming data (liveSSE=$liveSse)",
+      "group": "types"
+    },
+    {
+      "file": "packages/client/test/integration.test.ts",
+      "line": 382,
+      "name": "should get initial data and then receive updates (liveSSE=$liveSse)",
+      "group": "eager"
+    },
+    {
+      "file": "packages/client/test/integration.test.ts",
+      "line": 440,
+      "name": "should wait for processing before advancing stream (liveSSE=$liveSse)",
+      "group": "delivery"
+    },
+    {
+      "file": "packages/client/test/integration.test.ts",
+      "line": 492,
+      "name": "multiple clients can get the same data in parallel (liveSSE=$liveSse)",
+      "group": "delivery"
+    },
+    {
+      "file": "packages/client/test/integration.test.ts",
+      "line": 550,
+      "name": "can go offline and then catchup (liveSSE=$liveSse)",
+      "group": "delivery"
+    },
+    {
+      "file": "packages/client/test/integration.test.ts",
+      "line": 603,
+      "name": "should return correct caching headers",
+      "group": "cache"
+    },
+    {
+      "file": "packages/client/test/integration.test.ts",
+      "line": 654,
+      "name": "should revalidate etags",
+      "group": "cache"
+    },
+    {
+      "file": "packages/client/test/integration.test.ts",
+      "line": 722,
+      "name": "should correctly use a where clause for initial sync and updates (liveSSE=$liveSse)",
+      "group": "filter"
+    },
+    {
+      "file": "packages/client/test/integration.test.ts",
+      "line": 773,
+      "name": "should correctly select columns for initial sync and updates (liveSSE=$liveSse)",
+      "group": "filter"
+    },
+    {
+      "file": "packages/client/test/integration.test.ts",
+      "line": 821,
+      "name": "should handle columns with special characters (commas, quotes, spaces)",
+      "group": "quoted"
+    },
+    {
+      "file": "packages/client/test/integration.test.ts",
+      "line": 863,
+      "name": "should chunk a large log with reasonably sized chunks",
+      "group": "delivery"
+    },
+    {
+      "file": "packages/client/test/integration.test.ts",
+      "line": 927,
+      "name": "should handle invalid requests by terminating stream (liveSSE=$liveSse)",
+      "group": "terminal_errors"
+    },
+    {
+      "file": "packages/client/test/integration.test.ts",
+      "line": 964,
+      "name": "should handle invalid requests by terminating stream (liveSSE=$liveSse)",
+      "group": "terminal_errors"
+    },
+    {
+      "file": "packages/client/test/integration.test.ts",
+      "line": 1000,
+      "name": "should detect shape deprecation and restart syncing (liveSSE=$liveSse)",
+      "group": "eager"
+    },
+    {
+      "file": "packages/client/test/integration.test.ts",
+      "line": 1121,
+      "name": "should continue from same offset when recovering from error with onError retry (liveSSE=$liveSse)",
+      "group": "resume_error"
+    },
+    {
+      "file": "packages/client/test/cache.test.ts",
+      "line": 69,
+      "name": "should get a short max-age cache-conrol header in live mode",
+      "group": "cache"
+    },
+    {
+      "file": "packages/client/test/cache.test.ts",
+      "line": 109,
+      "name": "should collapse requests in live mode",
+      "group": "cache"
+    },
+    {
+      "file": "packages/client/test/cache.test.ts",
+      "line": 182,
+      "name": "should get cached response on second request",
+      "group": "cache"
+    },
+    {
+      "file": "packages/client/test/cache.test.ts",
+      "line": 205,
+      "name": "should get stale response when max age is passed but cache is not yet revalidated",
+      "group": "cache"
+    },
+    {
+      "file": "packages/client/test/cache.test.ts",
+      "line": 239,
+      "name": "should get fresh response when age is passed the stale age",
+      "group": "cache"
+    },
+    {
+      "file": "packages/client/test/cache.test.ts",
+      "line": 275,
+      "name": "tells client to resync when shape is out of scope",
+      "group": "eager"
+    }
+  ]
+}

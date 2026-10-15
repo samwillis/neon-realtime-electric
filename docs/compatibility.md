@@ -33,6 +33,22 @@ that has not been executed is not passing evidence. The baseline used Electric H
 Streams; the historical baseline configuration explicitly selects the reference
 HTTP adapter. Real Neon source and local lifecycle evidence is recorded below.
 
+`pnpm check:test-dispositions` checks the per-declaration inventory in
+[`upstream/service-test-dispositions.json`](../upstream/service-test-dispositions.json)
+against the actual baseline exclusions and pinned source. It discovers fixture
+aliases, chained `for`/`each` calls and BigInt fixtures, rather than counting only
+direct `it(...)` calls. All 87 declarations have a disposition: 46 mapped to
+candidate evidence, nine with partial coverage, 24 pending subset behavior and
+eight replaced at the native protocol/fixture boundary. These are declarations,
+not executed or expanded parameterized case counts.
+
+Each group records its scope, evidence references and remaining work. The check
+rejects missing/duplicate/stale entries, unknown groups and missing references.
+It verifies inventory coverage; it does not run those references or prove every
+original assertion equivalent. Partial and pending groups stay open. The
+original service-bound suites remain unrun references, and the historical HTTP
+cache assertions do not become passing native cache assertions.
+
 ## Phase 0 evidence
 
 Verified locally on Node 22.23.2 and pnpm 10.30.3:
