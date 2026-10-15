@@ -19,6 +19,7 @@ export interface ShapeHandlerOptions {
   longPollMs?: number
   maxEnvelopesPerRead?: number
   createLog?: import('./shape-owner.js').ShapeOwnerOptions['createLog']
+  onOwnerClosed?: import('./shape-owner.js').ShapeOwnerOptions['onClose']
 }
 
 /** Local single-owner Fetch handler; platform affinity remains a separate gate. */
@@ -64,6 +65,7 @@ export function createShapeHandler(options: ShapeHandlerOptions) {
       now,
       ttlMs: options.ttlMs,
       createLog: options.createLog,
+      onClose: options.onOwnerClosed,
     })
     const cleanup = setTimeout(
       () => remove(owner.handle),
@@ -170,11 +172,19 @@ export function createShapeHandler(options: ShapeHandlerOptions) {
       const offset = url.searchParams.get('offset') ?? '-1'
       let read
       try {
-        read = await owner.log.read(
-          offset,
-          options.maxEnvelopesPerRead,
-          request.signal
-        )
+        read =
+          request.method === 'HEAD'
+            ? {
+                ...owner.log.inspect(offset),
+                end: owner.log.head,
+                atTail: true,
+                envelopes: [],
+              }
+            : await owner.log.read(
+                offset,
+                options.maxEnvelopesPerRead,
+                request.signal
+              )
       } catch (error) {
         request.signal.throwIfAborted()
         if (!(error instanceof InvalidLogOffsetError)) {

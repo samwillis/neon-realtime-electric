@@ -18,6 +18,7 @@ in the handler's `authorize` callback, which runs on every read.
 
 ```sh
 pnpm test:local-baseline
+pnpm test:local-lifecycle
 # After changes are stable; leave neon dev running for the entire test:
 pnpm test:local-expiry
 ```
@@ -25,8 +26,9 @@ pnpm test:local-expiry
 `test:local-baseline` uses the copied Electric facade with the real Durable Streams
 reader against `http://localhost:4327/api/shape`. Override `SHAPE_URL` to test
 another existing proxy path. It checks snapshot readiness, unchanged path/origin,
-GET-only requests and saved-offset resume. It does not assert live publication
-correctness; see the unresolved staging integration gate.
+GET-only requests and saved-offset resume. The separate lifecycle script proves real no-reader writes/replay, live updates,
+filter exits/reentries, deletes and public transaction-ID conversion against SQL.
+Logical replication must be enabled; see `testing-environment.md`.
 
 The expiry script runs a real 15-minute interval and checks the handle shortly
 before and after its absolute deadline, then requires a replacement query-string
@@ -49,3 +51,10 @@ long polling, configured primary-keyed tables, projections and a bounded filter
 grammar (scalar comparisons/IS NULL joined with AND). Identifiers are resolved
 against the allowlist and operands are bound parameters. Unsupported options fail
 explicitly. SSE, advanced SQL, subsets and replica modes remain later gates.
+
+For Object Storage mode, load `.env.storage.local` alongside `.env.local` and set
+`NEON_SHAPE_LOG_BUCKET=your-private-shape-log-bucket`. `NEON_SHAPE_SEAL_BYTES=1` forces small
+sealed objects for acceptance tests; omit it for the normal 256 KiB threshold.
+`NEON_SHAPE_DIAGNOSTICS=true` logs event names and owner closure reasons without
+credentials. The local process sweeps expired prefixes at startup and every
+minute; this is not a platform background-execution guarantee.

@@ -4,16 +4,16 @@ Target: the full implementation plan through phase 7. No phase is complete until
 its exit evidence is recorded. Deferred platform affinity is outside the current
 local/staging test target, as agreed in `AGENTS.md`.
 
-| Phase                                         | Status                                 | Evidence / remaining gate                                                                                                                                                                                        |
-| --------------------------------------------- | -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 0: pristine import and compatibility baseline | Passed                                 | 80-file pinned import; 78 unchanged-file checks; build/typecheck; 553 runtime/declaration checks; identical packed consumers on TS 5.5.4/5.9.3; 62 exports across four declaration entry points                  |
-| 1: internal transport boundary                | Passed                                 | HTTP adapter extracted; all 553 baseline checks, build/typecheck, packed consumers and 62-export declaration comparison pass                                                                                     |
-| 2: real Durable Streams delivery              | Implemented; final gate audit pending  | Real reader/reference server; 55 native/protocol tests, 18 packed proxy tests, consumer/lifecycle conformance and clean patch install; early real staging/Function lifecycle experiment remains outstanding      |
-| 3: real staging Realtime                      | Implemented in part; live gate failing | Pinned SDK evidence patch, source adapter, serialized owner and bounded query compiler; real baseline verified, live publications absent on captured staging wire; see docs/staging-publication-investigation.md |
-| 4: Function handler and lifecycle             | Implemented in part; gates outstanding | Fetch read/HEAD/DELETE/long-poll handler, 35 server checks including real native reader; staging snapshot through `neon dev` passes; conformance, two-owner routing and live replay gates outstanding            |
-| 5: Object Storage                             | Implemented in part; gates outstanding | Shared memory/object index and replay tests, real S3 SDK/HTTP fixture, live staging Object Storage replay/cleanup pass; local object-backed Function and real 15-minute TTL gate remain outstanding              |
-| 6: replacement package/integrations           | Pending                                | Packed aliases, React and eager TanStack browser/type behavior                                                                                                                                                   |
-| 7: complete API expansion                     | Pending                                | SSE, replica modes, changes-only/now, types, mobile lifecycle, broader SQL, subsets and exact MVCC/cut reconciliation                                                                                            |
+| Phase                                         | Status                                 | Evidence / remaining gate                                                                                                                                                                                                               |
+| --------------------------------------------- | -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0: pristine import and compatibility baseline | Passed                                 | 80-file pinned import; 78 unchanged-file checks; build/typecheck; 553 runtime/declaration checks; identical packed consumers on TS 5.5.4/5.9.3; 62 exports across four declaration entry points                                         |
+| 1: internal transport boundary                | Passed                                 | HTTP adapter extracted; all 553 baseline checks, build/typecheck, packed consumers and 62-export declaration comparison pass                                                                                                            |
+| 2: real Durable Streams delivery              | Implemented; final gate audit pending  | Real reader/reference server; 55 native/protocol tests, 18 packed proxy tests, consumer/lifecycle conformance and clean patch install; early real staging/Function no-reader lifecycle now passes                                       |
+| 3: real staging Realtime                      | Implemented in part; live gate passed  | Pinned SDK evidence patch, source adapter, serialized owner and bounded query compiler; real baseline/live publications and transaction evidence pass after enabling logical replication; see docs/staging-publication-investigation.md |
+| 4: Function handler and lifecycle             | Implemented in part; gates outstanding | Fetch read/HEAD/DELETE/long-poll handler, 55 server checks including real native reader; staging snapshot through `neon dev` passes; conformance audit outstanding; controlled two-process routing and real local no-reader replay pass |
+| 5: Object Storage                             | Implemented in part; gates outstanding | Shared memory/object index and replay tests, real S3 SDK/HTTP fixture, live staging Object Storage replay/cleanup pass; local object-backed baseline/lifecycle pass; real 15-minute TTL gate remains outstanding                        |
+| 6: replacement package/integrations           | Pending                                | Packed aliases, React and eager TanStack browser/type behavior                                                                                                                                                                          |
+| 7: complete API expansion                     | Pending                                | SSE, replica modes, changes-only/now, types, mobile lifecycle, broader SQL, subsets and exact MVCC/cut reconciliation                                                                                                                   |
 
 ## Upstream test disposition
 
@@ -31,7 +31,7 @@ configuration discovers all `test/**/*.test.ts` except these service-bound suite
 These dispositions describe test execution, not feature support. An imported test
 that has not been executed is not passing evidence. The baseline used Electric HTTP at phase 0. Production now selects Durable
 Streams; the historical baseline configuration explicitly selects the reference
-HTTP adapter. No real Neon compatibility is claimed yet.
+HTTP adapter. Real Neon source and local lifecycle evidence is recorded below.
 
 ## Phase 0 evidence
 
@@ -106,17 +106,17 @@ Verified locally on Node 22.23.2:
   62-export/four-entry-point API report remain passing. The import verifier now
   checks 76 untouched files and names both reviewed source/build modifications.
 
-The controlled reader/proxy gates are verified. The early `neon dev`/real
-staging lifecycle experiment remains outstanding; these protocol tests do not
-establish that source or Function gate. The reference-server fixture serializes
+The controlled reader/proxy gates are verified. The early `neon dev`/real staging lifecycle experiment now passes separately;
+controlled protocol tests alone do not establish source or Function behavior. The reference-server fixture serializes
 append/index updates with reads: a stress run exposed a race in the initial
 fixture where bytes became readable before its offset-to-sequence index was
 updated. A reader could then receive a false invalid-offset error on its next
 poll. The fixture now publishes those boundaries together. Absolute expiry here
 is a controlled-clock fixture, not the required 15-minute real Function run.
 
-Real Realtime ingestion/MVCC provenance, Function execution, Object Storage,
-React/TanStack integration and phases 3–7 remain unimplemented. The facade
+Real Realtime ingestion/MVCC provenance, local Function execution and Object
+Storage are implemented with the evidence below. Phases 3–7 retain outstanding
+exit gates; React/TanStack integration is pending. The facade
 explicitly rejects SSE, changes-only/now and subset execution for now; copied
 public types and historical HTTP tests do not imply those native capabilities.
 
@@ -133,8 +133,8 @@ exercise raw values, early schema, buffered publication frontiers, ordered
 progress, cancellation and reset. Owner and handler tests use controlled source
 events; they do not claim staging live correctness.
 
-The required real Realtime integration gate is failing: captured server frames
-show progress but no publication for a committed matching insert. See
+The required real Realtime integration test passes unchanged after enabling
+logical replication on the dedicated staging project. See
 [the investigation](./staging-publication-investigation.md). The real 15-minute
 expiry test is available but has no completed passing run yet. Phases 3–7 remain
 incomplete.
@@ -146,5 +146,19 @@ The server now has an injectable `ShapeLog`, one shared immutable index, and
 and native-reader tests. Live Neon Object Storage tests pass against the private
 bucket in the dedicated staging project. The controlled two-process routing test
 passes for sticky query handles, no-reader ingestion/replay and a fresh handle
-after worker death. These controlled-source checks do not satisfy real Realtime
-publication acceptance. See [Object Storage details](./object-log.md).
+after worker death. Real Realtime publication acceptance passes separately; the routing fixture
+uses controlled sources and does not establish platform routing. See [Object Storage details](./object-log.md).
+
+## Local object-backed Function lifecycle
+
+The Function running under `neon dev` against real staging Postgres/Realtime and
+Neon Object Storage passes `test:local-baseline` and `test:local-lifecycle`.
+The latter disconnects readers, commits a write, resumes the same handle/offset,
+and checks replay merged with the baseline against SQL. It then verifies live
+updates, filter exit/reentry, deletion and wrapped public transaction IDs against
+actual database transaction IDs. Reports are ignored under `.artifacts/staging`.
+
+An earlier real TTL run failed its pre-expiry assertion before the replication
+setup correction; its cause was not established. It is not passing evidence.
+The improved runner records response timing/status and probes the current tail
+before expiry; a fresh passing full-duration run remains required.

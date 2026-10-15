@@ -19,6 +19,7 @@ export interface ShapeLog {
   readonly head: LogBoundary
   readonly disposed?: Promise<void>
   append(value: Envelope): LogBoundary
+  inspect(offset: string, limit?: number): Omit<LogRead, 'envelopes'>
   read(
     offset: string,
     limit?: number,
@@ -99,6 +100,10 @@ export abstract class IndexedShapeLog implements ShapeLog {
       end: { ...(entries.at(-1)?.boundary ?? boundary) },
       atTail: index + entries.length === this.entries.length,
     }
+  }
+  inspect(offset: string, limit?: number): Omit<LogRead, 'envelopes'> {
+    const { entries: _, index: __, ...metadata } = this.select(offset, limit)
+    return metadata
   }
   abstract read(
     offset: string,

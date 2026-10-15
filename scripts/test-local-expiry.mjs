@@ -4,7 +4,8 @@ import { setTimeout as delay } from 'node:timers/promises'
 
 const base = new URL(process.env.SHAPE_URL ?? 'http://localhost:4327/api/shape')
 base.searchParams.set('table', 'electric_items')
-const read = (url) => fetch(url, { signal: AbortSignal.timeout(20_000) })
+const read = (url, method = 'GET') =>
+  fetch(url, { method, signal: AbortSignal.timeout(20_000) })
 const response = await read(base)
 assert.equal(response.status, 200)
 const envelopes = await response.json()
@@ -36,27 +37,53 @@ await save()
 console.log(
   `Real 15-minute neon dev expiry run started; expires ${init.expiresAt}`
 )
-await delay(Math.max(0, expiresAt - Date.now() - 1500))
-const before = await read(resume)
-assert(
-  [200, 204].includes(before.status),
-  'Handle expired before its absolute deadline'
-)
-await before.arrayBuffer()
-await delay(Math.max(0, expiresAt - Date.now() + 100))
-const after = await read(resume)
-assert.equal(after.status, 409)
-const replacement = after.headers.get('electric-handle')
-assert(replacement && replacement !== handle)
-assert.equal(after.headers.get('location'), null)
-Object.assign(report, {
-  status: 'passed',
-  completedAt: new Date().toISOString(),
-  beforeStatus: before.status,
-  afterStatus: after.status,
-  replacementHandle: replacement,
-})
-await save()
-console.log(
-  'Real 15-minute neon dev expiry passed; replacement handle stays on the same URL'
-)
+try {
+  await delay(Math.max(0, expiresAt - Date.now() - 10_000))
+  const head = await read(resume, 'HEAD')
+  assert.equal(
+    head.status,
+    200,
+    'Pre-expiry HEAD must still identify this owner'
+  )
+  assert.equal(head.headers.get('electric-handle'), handle)
+  const atTail = new URL(resume)
+  atTail.searchParams.set('offset', head.headers.get('electric-offset'))
+  const before = await read(atTail)
+  Object.assign(report, {
+    beforeStatus: before.status,
+    beforeAt: new Date().toISOString(),
+    beforeRemainingMs: expiresAt - Date.now(),
+    beforeHandle: before.headers.get('electric-handle'),
+  })
+  await save()
+  assert(
+    [200, 204].includes(before.status),
+    `Expected a valid pre-expiry handle; received HTTP ${before.status}`
+  )
+  await before.arrayBuffer()
+  await delay(Math.max(0, expiresAt - Date.now() + 100))
+  const after = await read(resume)
+  assert.equal(after.status, 409)
+  const replacement = after.headers.get('electric-handle')
+  assert(replacement && replacement !== handle)
+  assert.equal(after.headers.get('location'), null)
+  Object.assign(report, {
+    status: 'passed',
+    completedAt: new Date().toISOString(),
+    beforeStatus: before.status,
+    afterStatus: after.status,
+    replacementHandle: replacement,
+  })
+  await save()
+  console.log(
+    'Real 15-minute neon dev expiry passed; replacement handle stays on the same URL'
+  )
+} catch (error) {
+  Object.assign(report, {
+    status: 'failed',
+    completedAt: new Date().toISOString(),
+    error: error instanceof Error ? error.message : String(error),
+  })
+  await save()
+  throw error
+}

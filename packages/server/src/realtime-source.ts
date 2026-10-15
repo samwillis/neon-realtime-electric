@@ -6,6 +6,8 @@ import {
 import type {
   RawLiveQuerySubscription,
   RealtimeSourceEvent,
+  RealtimeLogLevel,
+  RealtimeLogger,
 } from '@neon/realtime/client'
 
 /** Raw events from the pinned SDK's reconciled, ordered source callback. */
@@ -40,6 +42,8 @@ export interface NeonRealtimeSourceOptions {
   url: string
   secret: string
   db: string
+  logLevel?: RealtimeLogLevel
+  logger?: RealtimeLogger
 }
 
 /** Server-only boundary. Never expose a sealed query or project secret in a shape. */

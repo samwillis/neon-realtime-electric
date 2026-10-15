@@ -192,7 +192,11 @@ describe.each(['memory', 'objects'])(
       expect((await f.request('', 'HEAD')).status).toBe(404)
       const first = await f.request()
       const handle = first.headers.get('electric-handle')!
-      expect((await f.request(`handle=${handle}`, 'HEAD')).status).toBe(200)
+      const readsBeforeHead = f.objectStore.gets.length
+      const head = await f.request(`handle=${handle}`, 'HEAD')
+      expect(head.status).toBe(200)
+      expect(head.headers.get('Stream-Up-To-Date')).toBe('true')
+      expect(f.objectStore.gets.length).toBe(readsBeforeHead)
       expect((await f.request(`handle=${handle}&offset=123_456`)).status).toBe(
         400
       )

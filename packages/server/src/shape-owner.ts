@@ -30,6 +30,7 @@ export interface ShapeOwnerOptions {
   definition: OwnerDefinition
   now?: () => number
   ttlMs?: number
+  onClose?: (event: { handle: string; error: Error }) => void
   createLog?: (context: { handle: string; expiresAt: number }) => ShapeLog
 }
 
@@ -113,6 +114,7 @@ export class ShapeOwner {
     this.#abort.abort(error)
     this.log.close()
     this.#rows.clear()
+    this.options.onClose?.({ handle: this.handle, error })
   }
 
   #accept(event: SourceEvent): void {
