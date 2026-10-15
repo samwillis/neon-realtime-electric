@@ -1,0 +1,411 @@
+{
+  "package": "@electric-sql/client",
+  "version": "1.5.28",
+  "revision": "3f9809fb0bd894cb74470d434749673492ad7acf",
+  "workspaceAdaptations": [
+    "package.json",
+    "tsconfig.json"
+  ],
+  "files": [
+    {
+      "path": "LICENSE",
+      "upstreamPath": "LICENSE",
+      "gitBlob": "f433b1a53f5b830a205fd2df78e2b34974656c7b"
+    },
+    {
+      "path": ".eslintrc.cjs",
+      "upstreamPath": "packages/typescript-client/.eslintrc.cjs",
+      "gitBlob": "6df77a988f9b73d6e09700eed10c93727e3b49d9"
+    },
+    {
+      "path": ".prettierignore",
+      "upstreamPath": "packages/typescript-client/.prettierignore",
+      "gitBlob": "55371e5c854d642dedb74e38cb814890d007f8d0"
+    },
+    {
+      "path": ".prettierrc",
+      "upstreamPath": "packages/typescript-client/.prettierrc",
+      "gitBlob": "f685078fff21ca406e3f9f4b1f5c38bcf9a1b5d6"
+    },
+    {
+      "path": "CHANGELOG.md",
+      "upstreamPath": "packages/typescript-client/CHANGELOG.md",
+      "gitBlob": "b068706ca27c36d732ca30d1b8f25f0b07198c32"
+    },
+    {
+      "path": "README.md",
+      "upstreamPath": "packages/typescript-client/README.md",
+      "gitBlob": "e9ae6ebe2523b9f33d61369c43cab4d4b0b17a92"
+    },
+    {
+      "path": "SPEC.md",
+      "upstreamPath": "packages/typescript-client/SPEC.md",
+      "gitBlob": "9bb24c7d25bdf7dd49ef07a0e0e18b216cbb2bbf"
+    },
+    {
+      "path": "bin/analyze-pr-risks.mjs",
+      "upstreamPath": "packages/typescript-client/bin/analyze-pr-risks.mjs",
+      "gitBlob": "5a5662a66f955899f1d4a37e8f45b1afd39009c5"
+    },
+    {
+      "path": "bin/analyze-shape-stream-risks.mjs",
+      "upstreamPath": "packages/typescript-client/bin/analyze-shape-stream-risks.mjs",
+      "gitBlob": "b857279f7719d9ce511baf045bc43b0d8a6836e9"
+    },
+    {
+      "path": "bin/intent.mjs",
+      "upstreamPath": "packages/typescript-client/bin/intent.mjs",
+      "gitBlob": "399d8a317622be3f8cc49b1edc677134b71d0cb8"
+    },
+    {
+      "path": "bin/lib/shape-stream-static-analysis.mjs",
+      "upstreamPath": "packages/typescript-client/bin/lib/shape-stream-static-analysis.mjs",
+      "gitBlob": "1c0887725de8f65101ae1414c7ef71123d4633f8"
+    },
+    {
+      "path": "bin/pbt-soak.sh",
+      "upstreamPath": "packages/typescript-client/bin/pbt-soak.sh",
+      "gitBlob": "046998b1718317d64f38c35a828d4cf3b7ca6402"
+    },
+    {
+      "path": "package.json",
+      "upstreamPath": "packages/typescript-client/package.json",
+      "gitBlob": "92e1754f9c00241b0c221899232c50f14eaa61c3"
+    },
+    {
+      "path": "skills/electric-debugging/SKILL.md",
+      "upstreamPath": "packages/typescript-client/skills/electric-debugging/SKILL.md",
+      "gitBlob": "0e34793ac87e56e393b904585736eb1b6f806154"
+    },
+    {
+      "path": "skills/electric-deployment/SKILL.md",
+      "upstreamPath": "packages/typescript-client/skills/electric-deployment/SKILL.md",
+      "gitBlob": "4c31cc387561c9c0e5398273192cdfa67bdcb654"
+    },
+    {
+      "path": "skills/electric-new-feature/SKILL.md",
+      "upstreamPath": "packages/typescript-client/skills/electric-new-feature/SKILL.md",
+      "gitBlob": "59913b5e422d02af7271131246acd1eb62c9166f"
+    },
+    {
+      "path": "skills/electric-orm/SKILL.md",
+      "upstreamPath": "packages/typescript-client/skills/electric-orm/SKILL.md",
+      "gitBlob": "383bf28d78528df8a7237587080fb6b9d1e2f571"
+    },
+    {
+      "path": "skills/electric-postgres-security/SKILL.md",
+      "upstreamPath": "packages/typescript-client/skills/electric-postgres-security/SKILL.md",
+      "gitBlob": "13809fac58602ca341570130b503cef8cfcfc17c"
+    },
+    {
+      "path": "skills/electric-proxy-auth/SKILL.md",
+      "upstreamPath": "packages/typescript-client/skills/electric-proxy-auth/SKILL.md",
+      "gitBlob": "ac105aa9b3f514791b07bfcf57093e7b24b9accc"
+    },
+    {
+      "path": "skills/electric-schema-shapes/SKILL.md",
+      "upstreamPath": "packages/typescript-client/skills/electric-schema-shapes/SKILL.md",
+      "gitBlob": "6e1587391adf3d62b1e81f7ac13755f4676b2364"
+    },
+    {
+      "path": "skills/electric-shapes/SKILL.md",
+      "upstreamPath": "packages/typescript-client/skills/electric-shapes/SKILL.md",
+      "gitBlob": "12d3c0fd038e2ccfe3338201828a0b9f30806c2d"
+    },
+    {
+      "path": "skills/electric-shapes/references/type-parsers.md",
+      "upstreamPath": "packages/typescript-client/skills/electric-shapes/references/type-parsers.md",
+      "gitBlob": "0d72afc0442c38e42b22a779471ea63caeeca9e8"
+    },
+    {
+      "path": "skills/electric-shapes/references/where-clause.md",
+      "upstreamPath": "packages/typescript-client/skills/electric-shapes/references/where-clause.md",
+      "gitBlob": "6c8098ed362f75926f22d8320ff68ec81ebda0aa"
+    },
+    {
+      "path": "src/client.ts",
+      "upstreamPath": "packages/typescript-client/src/client.ts",
+      "gitBlob": "1e8027bd41d8be0de9ebe84ef06012d3ab5a91cf"
+    },
+    {
+      "path": "src/column-mapper.ts",
+      "upstreamPath": "packages/typescript-client/src/column-mapper.ts",
+      "gitBlob": "15bd2d6ef22810db2fba6ae608229cdbd87ce752"
+    },
+    {
+      "path": "src/constants.ts",
+      "upstreamPath": "packages/typescript-client/src/constants.ts",
+      "gitBlob": "b929186f3cb1b8677ea36b25fe4c1a31bd435cd8"
+    },
+    {
+      "path": "src/error.ts",
+      "upstreamPath": "packages/typescript-client/src/error.ts",
+      "gitBlob": "3618df06d2888a605f03c46a64862f8f31c245d2"
+    },
+    {
+      "path": "src/expired-shapes-cache.ts",
+      "upstreamPath": "packages/typescript-client/src/expired-shapes-cache.ts",
+      "gitBlob": "7c659fe952f227cd4a480e1d71232992f9024de7"
+    },
+    {
+      "path": "src/expression-compiler.ts",
+      "upstreamPath": "packages/typescript-client/src/expression-compiler.ts",
+      "gitBlob": "af6ef47d8abc07c034955abd117b301d8ce8178e"
+    },
+    {
+      "path": "src/fetch.ts",
+      "upstreamPath": "packages/typescript-client/src/fetch.ts",
+      "gitBlob": "accde8273fd46530c51abc600cfdd480be74d63f"
+    },
+    {
+      "path": "src/helpers.ts",
+      "upstreamPath": "packages/typescript-client/src/helpers.ts",
+      "gitBlob": "a1fd70fb2281bb47cfa64ea00a1799c99b8e42ed"
+    },
+    {
+      "path": "src/index.ts",
+      "upstreamPath": "packages/typescript-client/src/index.ts",
+      "gitBlob": "3382d4c2634567a706219e1563e45c599137a744"
+    },
+    {
+      "path": "src/parser.ts",
+      "upstreamPath": "packages/typescript-client/src/parser.ts",
+      "gitBlob": "4689848bb31037dec554754ac34d26785925aaf6"
+    },
+    {
+      "path": "src/pause-lock.ts",
+      "upstreamPath": "packages/typescript-client/src/pause-lock.ts",
+      "gitBlob": "d2980cd911a8c89108478bf5df842834395eaac8"
+    },
+    {
+      "path": "src/react-native-shim.d.ts",
+      "upstreamPath": "packages/typescript-client/src/react-native-shim.d.ts",
+      "gitBlob": "cf0424b12a394b643b880a42c23b164f1084bff0"
+    },
+    {
+      "path": "src/react-native.ts",
+      "upstreamPath": "packages/typescript-client/src/react-native.ts",
+      "gitBlob": "4eeb26b93d8d095f63f56f838970472c964db79a"
+    },
+    {
+      "path": "src/runtime-visibility.ts",
+      "upstreamPath": "packages/typescript-client/src/runtime-visibility.ts",
+      "gitBlob": "56adeddf500284a659573b9a4cf9f77ea24b8626"
+    },
+    {
+      "path": "src/shape-stream-state.ts",
+      "upstreamPath": "packages/typescript-client/src/shape-stream-state.ts",
+      "gitBlob": "c756245c6ac88e241d64a44272d02ec2758f4cf7"
+    },
+    {
+      "path": "src/shape.ts",
+      "upstreamPath": "packages/typescript-client/src/shape.ts",
+      "gitBlob": "6b7487bd6044d0424774b74be7bcdef855c87206"
+    },
+    {
+      "path": "src/snapshot-tracker.ts",
+      "upstreamPath": "packages/typescript-client/src/snapshot-tracker.ts",
+      "gitBlob": "ccee686b9acfefaee89a09cc30359814cef0294b"
+    },
+    {
+      "path": "src/types.ts",
+      "upstreamPath": "packages/typescript-client/src/types.ts",
+      "gitBlob": "a4cff5bee595ecb57a9322344b3fa9c449b734e5"
+    },
+    {
+      "path": "src/up-to-date-tracker.ts",
+      "upstreamPath": "packages/typescript-client/src/up-to-date-tracker.ts",
+      "gitBlob": "6ca29b2255409a970b1bde722aa9b40a51e3560e"
+    },
+    {
+      "path": "test/204-no-content.test.ts",
+      "upstreamPath": "packages/typescript-client/test/204-no-content.test.ts",
+      "gitBlob": "244c57bdcee23bf8bd9e35a9a14bcefea32d668f"
+    },
+    {
+      "path": "test/__snapshots__/client.test.ts.snap",
+      "upstreamPath": "packages/typescript-client/test/__snapshots__/client.test.ts.snap",
+      "gitBlob": "8ec47c9336b9472052db531ec7c1d62352bf97cf"
+    },
+    {
+      "path": "test/cache.test.ts",
+      "upstreamPath": "packages/typescript-client/test/cache.test.ts",
+      "gitBlob": "7fac414012b5482dfadba04a07761079b8eb1f24"
+    },
+    {
+      "path": "test/client.test-d.ts",
+      "upstreamPath": "packages/typescript-client/test/client.test-d.ts",
+      "gitBlob": "2ce4bf71f8ceab665af9931ed9998b1935252fb2"
+    },
+    {
+      "path": "test/client.test.ts",
+      "upstreamPath": "packages/typescript-client/test/client.test.ts",
+      "gitBlob": "94830fc02ffa297ff65d11c5ed367d93a28ea5ce"
+    },
+    {
+      "path": "test/column-mapper.test.ts",
+      "upstreamPath": "packages/typescript-client/test/column-mapper.test.ts",
+      "gitBlob": "8074ac38507897e6e71559a9930d9d4ad70f12a2"
+    },
+    {
+      "path": "test/error.test.ts",
+      "upstreamPath": "packages/typescript-client/test/error.test.ts",
+      "gitBlob": "9a3bf7f3ec9785c2a0061737135f2e78e27b24c4"
+    },
+    {
+      "path": "test/expired-shapes-cache.test.ts",
+      "upstreamPath": "packages/typescript-client/test/expired-shapes-cache.test.ts",
+      "gitBlob": "1d62c652548695af7a46925ac0571215ecb542d6"
+    },
+    {
+      "path": "test/expression-compiler.test.ts",
+      "upstreamPath": "packages/typescript-client/test/expression-compiler.test.ts",
+      "gitBlob": "27839a1a35517d1d011d29c4781782c2e59edbf2"
+    },
+    {
+      "path": "test/fetch.test.ts",
+      "upstreamPath": "packages/typescript-client/test/fetch.test.ts",
+      "gitBlob": "91cd353900ea32929b00d5e40ade78ba0e52522c"
+    },
+    {
+      "path": "test/fixtures/static-analysis/error-path-data-publish.ts",
+      "upstreamPath": "packages/typescript-client/test/fixtures/static-analysis/error-path-data-publish.ts",
+      "gitBlob": "225e58cf143113ba0898863b94e57cfc93f4b7ca"
+    },
+    {
+      "path": "test/fixtures/static-analysis/protocol-literal-near-miss.ts",
+      "upstreamPath": "packages/typescript-client/test/fixtures/static-analysis/protocol-literal-near-miss.ts",
+      "gitBlob": "0cba7e2e7ae21020e1cd0d788eec5526d617dbfb"
+    },
+    {
+      "path": "test/fixtures/static-analysis/protocol-literal-raw.ts",
+      "upstreamPath": "packages/typescript-client/test/fixtures/static-analysis/protocol-literal-raw.ts",
+      "gitBlob": "57d64cbb5d1f85c5e571a6a9ce2beb04412bf577"
+    },
+    {
+      "path": "test/helpers.test-d.ts",
+      "upstreamPath": "packages/typescript-client/test/helpers.test-d.ts",
+      "gitBlob": "9e439e209e1d1a214e877d736c16199c9bd28059"
+    },
+    {
+      "path": "test/helpers.test.ts",
+      "upstreamPath": "packages/typescript-client/test/helpers.test.ts",
+      "gitBlob": "ca624616e365d09b205daced6d3b559f7ea1e75d"
+    },
+    {
+      "path": "test/integration.test.ts",
+      "upstreamPath": "packages/typescript-client/test/integration.test.ts",
+      "gitBlob": "2637967027ea92841eed8afcb8e8e2b6d52eeb9e"
+    },
+    {
+      "path": "test/model-based.test.ts",
+      "upstreamPath": "packages/typescript-client/test/model-based.test.ts",
+      "gitBlob": "19f2cc6ac3129ecd9c1dcd1861ef079b34b01de3"
+    },
+    {
+      "path": "test/parser.test.ts",
+      "upstreamPath": "packages/typescript-client/test/parser.test.ts",
+      "gitBlob": "e925e5a42e5947a878f191719f5923a29c3a5ff6"
+    },
+    {
+      "path": "test/pause-lock.test.ts",
+      "upstreamPath": "packages/typescript-client/test/pause-lock.test.ts",
+      "gitBlob": "4c7b8c5aaf5e1655c5b91b0e2af1f1a6af7f369a"
+    },
+    {
+      "path": "test/pbt-micro.test.ts",
+      "upstreamPath": "packages/typescript-client/test/pbt-micro.test.ts",
+      "gitBlob": "36ad79608c87394f820b311d9dc2a6cea752e8a8"
+    },
+    {
+      "path": "test/shape-stream-state.test.ts",
+      "upstreamPath": "packages/typescript-client/test/shape-stream-state.test.ts",
+      "gitBlob": "8380f395f84671ac02bb80bc6b6e983f04bd8051"
+    },
+    {
+      "path": "test/snapshot-tracker.test.ts",
+      "upstreamPath": "packages/typescript-client/test/snapshot-tracker.test.ts",
+      "gitBlob": "f8da0d277adc237f217b74e475a56a472cbb37e8"
+    },
+    {
+      "path": "test/static-analysis.test.ts",
+      "upstreamPath": "packages/typescript-client/test/static-analysis.test.ts",
+      "gitBlob": "87a6a9b9af3777f1498738066685c19752dd104c"
+    },
+    {
+      "path": "test/stream.test.ts",
+      "upstreamPath": "packages/typescript-client/test/stream.test.ts",
+      "gitBlob": "84e76782ee259f02d86f5fa7d994246ae3d8996f"
+    },
+    {
+      "path": "test/support/global-setup.ts",
+      "upstreamPath": "packages/typescript-client/test/support/global-setup.ts",
+      "gitBlob": "ec2cd8b2849344f4c8cfde01cc00068af0fd2688"
+    },
+    {
+      "path": "test/support/mock-fetch-harness.ts",
+      "upstreamPath": "packages/typescript-client/test/support/mock-fetch-harness.ts",
+      "gitBlob": "c4c0cbff228c0a2f04195d4f8a7a54245ab7bc21"
+    },
+    {
+      "path": "test/support/state-machine-dsl.ts",
+      "upstreamPath": "packages/typescript-client/test/support/state-machine-dsl.ts",
+      "gitBlob": "51f7bd555228c79f3137c035880b13fce1782b1c"
+    },
+    {
+      "path": "test/support/state-transition-table.ts",
+      "upstreamPath": "packages/typescript-client/test/support/state-transition-table.ts",
+      "gitBlob": "9cae5c5f1a484aad6107c51b1b2ac168348a459c"
+    },
+    {
+      "path": "test/support/test-context.ts",
+      "upstreamPath": "packages/typescript-client/test/support/test-context.ts",
+      "gitBlob": "cfe1101fb83478c392e2028ac0d96b880ff8e4f3"
+    },
+    {
+      "path": "test/support/test-helpers.ts",
+      "upstreamPath": "packages/typescript-client/test/support/test-helpers.ts",
+      "gitBlob": "b91b63291fa21c2f2b34212262fc7f04aeb60968"
+    },
+    {
+      "path": "test/up-to-date-tracker.test.ts",
+      "upstreamPath": "packages/typescript-client/test/up-to-date-tracker.test.ts",
+      "gitBlob": "24844324ed9785545603143286910052a6c4278f"
+    },
+    {
+      "path": "test/wake-detection.test.ts",
+      "upstreamPath": "packages/typescript-client/test/wake-detection.test.ts",
+      "gitBlob": "1dafda2b68991f01d5ef76fbaafa16596db7aeee"
+    },
+    {
+      "path": "tsconfig.build.json",
+      "upstreamPath": "packages/typescript-client/tsconfig.build.json",
+      "gitBlob": "2b03dee7d22ed20294c240fe882fd0a722f7a989"
+    },
+    {
+      "path": "tsconfig.json",
+      "upstreamPath": "packages/typescript-client/tsconfig.json",
+      "gitBlob": "bf3e8675bd785a74bdd6647499e596c31d547f6c"
+    },
+    {
+      "path": "tsup.config.ts",
+      "upstreamPath": "packages/typescript-client/tsup.config.ts",
+      "gitBlob": "4a4d939eab45221a305ae25c1bb43704dd2d1469"
+    },
+    {
+      "path": "vitest.config.ts",
+      "upstreamPath": "packages/typescript-client/vitest.config.ts",
+      "gitBlob": "ef28d8fd901cb43cb0e016c29f39a0477a25df29"
+    },
+    {
+      "path": "vitest.pbt.config.ts",
+      "upstreamPath": "packages/typescript-client/vitest.pbt.config.ts",
+      "gitBlob": "8b52d90eec10ec03299009367879f6148b893cb1"
+    },
+    {
+      "path": "vitest.unit.config.ts",
+      "upstreamPath": "packages/typescript-client/vitest.unit.config.ts",
+      "gitBlob": "f8b98e8bcc0370b9fb6a03c97592d8e18cb1828d"
+    }
+  ]
+}

@@ -1,0 +1,37 @@
+{
+  "name": "neon-realtime-electric",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.30.3",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "build": "pnpm --filter @neon/realtime-electric-client build",
+    "typecheck": "pnpm --filter @neon/realtime-electric-client typecheck",
+    "test": "pnpm test:client",
+    "test:client": "pnpm --filter @neon/realtime-electric-client test:unit",
+    "test:types": "pnpm --filter @neon/realtime-electric-client test:types",
+    "test:package": "node scripts/test-package-compatibility.mjs",
+    "check:upstream": "node scripts/import-electric-client.mjs --check",
+    "check:api": "node scripts/compare-public-api.mjs",
+    "lint": "prettier --check scripts/*.mjs package.json pnpm-workspace.yaml tests/compatibility/consumer.ts"
+  },
+  "devDependencies": {
+    "@types/node": "24.10.1",
+    "@types/pg": "8.11.6",
+    "@types/uuid": "10.0.0",
+    "cache-control-parser": "2.0.6",
+    "fast-check": "4.6.0",
+    "jsdom": "26.1.0",
+    "pg": "8.12.0",
+    "prettier": "3.6.2",
+    "shx": "0.3.4",
+    "tsup": "8.5.0",
+    "typescript": "5.9.3",
+    "uuid": "10.0.0",
+    "vitest": "4.0.15",
+    "vitest-localstorage-mock": "0.1.2"
+  }
+}

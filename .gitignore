@@ -5,3 +5,10 @@
 .neon
 .neon/
 .DS_Store
+node_modules/
+dist/
+coverage/
+junit/
+.artifacts/
+test-results/
+playwright-report/

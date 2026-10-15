@@ -1,0 +1,103 @@
+{
+  "name": "@neon/realtime-electric-client",
+  "description": "Electric ShapeStream and Shape APIs over Neon Realtime and Durable Streams",
+  "version": "0.1.0-dev.0",
+  "keywords": [
+    "tanstack-intent"
+  ],
+  "author": "ElectricSQL team and contributors.",
+  "bugs": {
+    "url": "https://github.com/electric-sql/electric/issues"
+  },
+  "dependencies": {
+    "@microsoft/fetch-event-source": "^2.0.1"
+  },
+  "devDependencies": {},
+  "type": "module",
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "browser": {
+        "import": {
+          "types": "./dist/index.d.ts",
+          "default": "./dist/index.mjs"
+        },
+        "require": {
+          "types": "./dist/cjs/index.d.cts",
+          "default": "./dist/cjs/index.cjs"
+        },
+        "default": "./dist/index.mjs"
+      },
+      "react-native": {
+        "import": {
+          "types": "./dist/index.react-native.d.ts",
+          "default": "./dist/index.react-native.mjs"
+        },
+        "require": {
+          "types": "./dist/cjs/index.react-native.d.cts",
+          "default": "./dist/cjs/index.react-native.cjs"
+        },
+        "default": "./dist/index.react-native.mjs"
+      },
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.mjs"
+      },
+      "require": {
+        "types": "./dist/cjs/index.d.cts",
+        "default": "./dist/cjs/index.cjs"
+      }
+    },
+    "./react-native": {
+      "import": {
+        "types": "./dist/index.react-native.d.ts",
+        "default": "./dist/index.react-native.mjs"
+      },
+      "require": {
+        "types": "./dist/cjs/index.react-native.d.cts",
+        "default": "./dist/cjs/index.react-native.cjs"
+      },
+      "default": "./dist/index.react-native.mjs"
+    }
+  },
+  "bin": {
+    "intent": "./bin/intent.mjs"
+  },
+  "files": [
+    "dist",
+    "src",
+    "skills",
+    "bin",
+    "!skills/_artifacts",
+    "!src/react-native-shim.d.ts"
+  ],
+  "homepage": "https://electric-sql.com",
+  "license": "Apache-2.0",
+  "main": "./dist/cjs/index.cjs",
+  "module": "./dist/index.legacy-esm.js",
+  "react-native": "./dist/cjs/index.react-native.cjs",
+  "types": "./dist/index.d.ts",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/electric-sql/electric.git"
+  },
+  "scripts": {
+    "build": "shx rm -rf dist && tsup && tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json",
+    "test:unit": "vitest run --config vitest.baseline.config.ts",
+    "test:types": "vitest run --config vitest.baseline.config.ts --typecheck.only",
+    "test:upstream-service": "vitest run --config vitest.config.ts"
+  },
+  "sideEffects": [
+    "./src/react-native.ts",
+    "./dist/index.react-native.mjs",
+    "./dist/cjs/index.react-native.cjs"
+  ],
+  "typesVersions": {
+    "*": {
+      "*": [
+        "./dist/index.d.ts"
+      ]
+    }
+  }
+}
