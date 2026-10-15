@@ -1,3 +1,4 @@
+import { InvalidLogOffsetError } from './shape-log.js'
 import { ShapeDefinitionError } from './definition.js'
 import { createHash } from 'node:crypto'
 import { encodeReadProof } from '@neon/realtime-electric-protocol/read-proof'
@@ -17,6 +18,7 @@ export interface ShapeHandlerOptions {
   ttlMs?: number
   longPollMs?: number
   maxEnvelopesPerRead?: number
+  createLog?: import('./shape-owner.js').ShapeOwnerOptions['createLog']
 }
 
 /** Local single-owner Fetch handler; platform affinity remains a separate gate. */
@@ -31,6 +33,8 @@ export function createShapeHandler(options: ShapeHandlerOptions) {
   >()
   const now = options.now ?? Date.now
   let closed = false
+  const pendingCleanup = new Set<Promise<void>>()
+  let cleanupError: Error | undefined
   const cors = {
     'access-control-allow-origin': '*',
     'access-control-expose-headers':
@@ -43,6 +47,15 @@ export function createShapeHandler(options: ShapeHandlerOptions) {
     owners.delete(handle)
     clearTimeout(entry.cleanup)
     entry.owner.close()
+    if (entry.owner.log.disposed) {
+      const operation = entry.owner.log.disposed
+        .catch((error) => {
+          cleanupError ??=
+            error instanceof Error ? error : new Error(String(error))
+        })
+        .finally(() => pendingCleanup.delete(operation))
+      pendingCleanup.add(operation)
+    }
   }
   const create = (authorized: AuthorizedShape, identity: string) => {
     const owner = new ShapeOwner({
@@ -50,6 +63,7 @@ export function createShapeHandler(options: ShapeHandlerOptions) {
       definition: authorized.definition,
       now,
       ttlMs: options.ttlMs,
+      createLog: options.createLog,
     })
     const cleanup = setTimeout(
       () => remove(owner.handle),
@@ -112,6 +126,7 @@ export function createShapeHandler(options: ShapeHandlerOptions) {
           { status: 403, headers: cors }
         )
       }
+      request.signal.throwIfAborted()
       const identity = createHash('sha256')
         .update(
           JSON.stringify(authorized, (_, value) =>
@@ -155,8 +170,18 @@ export function createShapeHandler(options: ShapeHandlerOptions) {
       const offset = url.searchParams.get('offset') ?? '-1'
       let read
       try {
-        read = owner.log.read(offset, options.maxEnvelopesPerRead)
-      } catch {
+        read = await owner.log.read(
+          offset,
+          options.maxEnvelopesPerRead,
+          request.signal
+        )
+      } catch (error) {
+        request.signal.throwIfAborted()
+        if (!(error instanceof InvalidLogOffsetError)) {
+          owner.close(error instanceof Error ? error : new Error(String(error)))
+          remove(owner.handle)
+          return refetch(authorized, identity, request.method)
+        }
         return Response.json(
           { error: 'Invalid shape offset' },
           { status: 400, headers: cors }
@@ -181,7 +206,24 @@ export function createShapeHandler(options: ShapeHandlerOptions) {
           remove(owner.handle)
           return refetch(authorized, identity, request.method)
         }
-        read = owner.log.read(offset, options.maxEnvelopesPerRead)
+        try {
+          read = await owner.log.read(
+            offset,
+            options.maxEnvelopesPerRead,
+            request.signal
+          )
+        } catch (error) {
+          request.signal.throwIfAborted()
+          owner.close(error instanceof Error ? error : new Error(String(error)))
+          remove(owner.handle)
+          return refetch(authorized, identity, request.method)
+        }
+      }
+      try {
+        owner.assertValid()
+      } catch {
+        remove(owner.handle)
+        return refetch(authorized, identity, request.method)
       }
       const end = request.method === 'HEAD' ? owner.log.head : read.end
       const headers = new Headers({
@@ -215,6 +257,10 @@ export function createShapeHandler(options: ShapeHandlerOptions) {
       closed = true
       for (const handle of [...owners.keys()]) remove(handle)
       options.source.close()
+    },
+    async drain(): Promise<void> {
+      await Promise.all([...pendingCleanup])
+      if (cleanupError) throw cleanupError
     },
     get activeShapes() {
       return owners.size

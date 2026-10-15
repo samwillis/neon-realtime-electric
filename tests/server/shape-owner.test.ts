@@ -67,16 +67,16 @@ describe('serialized source shape owner', () => {
     const f = await fixture()
     try {
       expect(f.owner.schema).toBeUndefined()
-      expect(f.owner.log.read('-1').envelopes.map((e) => e.kind)).toEqual([
-        'initializing',
-      ])
+      expect(
+        (await f.owner.log.read('-1')).envelopes.map((e) => e.kind)
+      ).toEqual(['initializing'])
       f.push({ type: 'schema', columns })
       await f.owner.settled()
       expect(f.owner.schema).toEqual(definition.schema)
       expect(f.owner.log.head.baselineComplete).toBe(false)
       f.push({ type: 'baseline', rows: [row], mvcc })
       await f.owner.settled()
-      const read = f.owner.log.read('-1')
+      const read = await f.owner.log.read('-1')
       expect(read.envelopes.map((e) => e.kind)).toEqual([
         'initializing',
         'snapshot-chunk',
@@ -139,7 +139,7 @@ describe('serialized source shape owner', () => {
         mvcc: { xmin: '9007199254741000', xmax: '9007199254741000', xip: [] },
       })
       await f.owner.settled()
-      const read = f.owner.log.read(offset)
+      const read = await f.owner.log.read(offset)
       expect(read.envelopes.map((e) => e.seq)).toEqual([
         '4',
         '5',

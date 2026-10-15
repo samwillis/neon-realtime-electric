@@ -11,7 +11,7 @@ local/staging test target, as agreed in `AGENTS.md`.
 | 2: real Durable Streams delivery              | Implemented; final gate audit pending  | Real reader/reference server; 55 native/protocol tests, 18 packed proxy tests, consumer/lifecycle conformance and clean patch install; early real staging/Function lifecycle experiment remains outstanding      |
 | 3: real staging Realtime                      | Implemented in part; live gate failing | Pinned SDK evidence patch, source adapter, serialized owner and bounded query compiler; real baseline verified, live publications absent on captured staging wire; see docs/staging-publication-investigation.md |
 | 4: Function handler and lifecycle             | Implemented in part; gates outstanding | Fetch read/HEAD/DELETE/long-poll handler, 35 server checks including real native reader; staging snapshot through `neon dev` passes; conformance, two-owner routing and live replay gates outstanding            |
-| 5: Object Storage                             | Pending                                | Stable replay ranges, upload/read failures and actual 15-minute local TTL                                                                                                                                        |
+| 5: Object Storage                             | Implemented in part; gates outstanding | Shared memory/object index and replay tests, real S3 SDK/HTTP fixture, live staging Object Storage replay/cleanup pass; local object-backed Function and real 15-minute TTL gate remain outstanding              |
 | 6: replacement package/integrations           | Pending                                | Packed aliases, React and eager TanStack browser/type behavior                                                                                                                                                   |
 | 7: complete API expansion                     | Pending                                | SSE, replica modes, changes-only/now, types, mobile lifecycle, broader SQL, subsets and exact MVCC/cut reconciliation                                                                                            |
 
@@ -138,3 +138,13 @@ show progress but no publication for a committed matching insert. See
 [the investigation](./staging-publication-investigation.md). The real 15-minute
 expiry test is available but has no completed passing run yet. Phases 3–7 remain
 incomplete.
+
+## Object-backed replay and routing evidence
+
+The server now has an injectable `ShapeLog`, one shared immutable index, and
+`ObjectShapeLog` plus a real S3 adapter. Both backend variants run the same handler
+and native-reader tests. Live Neon Object Storage tests pass against the private
+bucket in the dedicated staging project. The controlled two-process routing test
+passes for sticky query handles, no-reader ingestion/replay and a fresh handle
+after worker death. These controlled-source checks do not satisfy real Realtime
+publication acceptance. See [Object Storage details](./object-log.md).

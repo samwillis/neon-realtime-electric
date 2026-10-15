@@ -11,6 +11,7 @@ import type {
   SourceEvent,
   SourceQuery,
 } from './realtime-source.js'
+import type { ShapeLog } from './shape-log.js'
 import { MemoryShapeLog } from './memory-log.js'
 
 export interface OwnerDefinition {
@@ -29,12 +30,13 @@ export interface ShapeOwnerOptions {
   definition: OwnerDefinition
   now?: () => number
   ttlMs?: number
+  createLog?: (context: { handle: string; expiresAt: number }) => ShapeLog
 }
 
 /** A handle has exactly one source epoch and an absolute, bounded lifetime. */
 export class ShapeOwner {
   readonly handle = randomUUID()
-  readonly log = new MemoryShapeLog()
+  readonly log: ShapeLog
   readonly expiresAt: number
   readonly definition: OwnerDefinition
   readonly #abort = new AbortController()
@@ -55,6 +57,9 @@ export class ShapeOwner {
     if (!Number.isFinite(ttl) || ttl <= 0 || ttl > 900_000)
       throw new Error('Shape TTL must be positive and at most 15 minutes')
     this.expiresAt = this.#now() + ttl
+    this.log =
+      options.createLog?.({ handle: this.handle, expiresAt: this.expiresAt }) ??
+      new MemoryShapeLog()
     this.#append({
       kind: 'initializing',
       handle: this.handle,

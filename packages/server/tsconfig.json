@@ -6,6 +6,7 @@
   "include": [
     "src/**/*.ts",
     "../../tests/server/**/*.ts",
-    "../../tests/integration/**/*.ts"
+    "../../tests/integration/**/*.ts",
+    "../../tests/storage/**/*.ts"
   ]
 }
