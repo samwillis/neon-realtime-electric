@@ -10,7 +10,7 @@ local/staging test target, as agreed in `AGENTS.md`.
 | 1: internal transport boundary                | Passed                                 | HTTP adapter extracted; all 553 baseline checks, build/typecheck, packed consumers and 62-export declaration comparison pass                                                                                                            |
 | 2: real Durable Streams delivery              | Implemented; final gate audit pending  | Real reader/reference server; 59 native/protocol tests, 18 packed proxy tests, consumer/lifecycle conformance and clean patch install; early real staging/Function no-reader lifecycle now passes                                       |
 | 3: real staging Realtime                      | Implemented in part; live gate passed  | Pinned SDK evidence patch, source adapter, serialized owner and WHERE passthrough; real baseline/live publications and transaction evidence pass after enabling logical replication; see docs/staging-publication-investigation.md |
-| 4: Function handler and lifecycle             | Implemented in part; gates outstanding | Fetch read/HEAD/DELETE/long-poll/SSE handler, 120 server checks; selected native JSON read/store conformance passes; staging snapshot/lifecycle through `neon dev` and controlled owner routing pass; final gate audit outstanding |
+| 4: Function handler and lifecycle             | Implemented in part; gates outstanding | Fetch read/HEAD/DELETE/long-poll/SSE handler, 156 server checks; selected native JSON read/store conformance passes; staging snapshot/lifecycle through `neon dev` and controlled owner routing pass; final gate audit outstanding |
 | 5: Object Storage                             | Implemented in part; gates outstanding | Shared memory/object index and replay tests, real S3 SDK/HTTP fixture, live staging Object Storage replay/cleanup pass; local object-backed baseline/lifecycle pass; real local 15-minute expiry/refetch run passes                        |
 | 6: replacement package/integrations           | Implemented; gate audit pending        | Fresh packed original/candidate React/TanStack builds and TS 5.5/5.9 compilation; Chrome baseline/live/auth/refetch and optimistic real tx acknowledgement pass                                                                         |
 | 7: complete API expansion                     | Implemented in part                                | SSE, replica modes, changes-only/now, WHERE passthrough, expanded real type matrix and native-reader mobile lifecycle gates implemented; complete types/events, subsets and exact MVCC/cut reconciliation remain                                                                                                                   |
@@ -344,3 +344,19 @@ through the production handler and real Durable Streams reader, with fixture
 object storage. They do not establish additional backend capabilities or runtime
 subsets. Cross-package error-class identity is not part of the structural
 materializer contract; application aliases must still resolve consistently.
+
+## Production transport option checks
+
+The server suite includes 36 checks of the copied client using the real Durable
+Streams reader and production Fetch handler with controlled source events.
+Polling/SSE each run with native and Electric-only response headers. Async
+`onError` recovery exercises params-only, headers-only, combined and empty retry
+objects, preserving the other params/headers and the configured URL. Terminal
+null/undefined/absent handlers propagate the public `FetchError`; missing row
+schema stays fatal even when the handler requests a retry. Initial/loading and
+recovered connection state are asserted. Custom date parsing and column mapping
+precede the transformer for both baseline rows and sparse live updates.
+
+These checks add production transport evidence alongside the retained HTTP
+reference tests. They do not complete the historical test disposition audit or
+enable the remaining subset/source-dependent gates.
