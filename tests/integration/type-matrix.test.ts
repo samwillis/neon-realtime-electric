@@ -12,9 +12,7 @@ import {
   type PostgresSnapshot,
   type Row,
 } from '../../packages/client/src/index.js'
-import { resolveConfiguredShape } from '../../packages/server/src/definition.js'
-import { createShapeHandler } from '../../packages/server/src/handler.js'
-import { createNeonRealtimeSource } from '../../packages/server/src/realtime-source.js'
+import { startLocalFunction } from './support/local-function.js'
 import { recordRealtimeWire } from './support/wire-recorder.js'
 
 function required(key: string): string {
@@ -27,6 +25,56 @@ const quote = (name: string) => `"${name.replaceAll('"', '""')}"`
 // Explicit golden values, independent of the candidate parser. String-only
 // types additionally compare against Postgres ::text from a separate query.
 const allCases = [
+  {
+    name: 'enum_array',
+    sqlType: 'custom_mood[]',
+    qualified: true,
+    type: 'custom_mood',
+    dims: 1,
+    sql: "'{sad,ok,happy}'",
+    value: ['sad', 'ok', 'happy'],
+    updatedSql: "'{sad,happy}'",
+    updatedValue: ['sad', 'happy'],
+  },
+  {
+    name: 'enum_matrix',
+    sqlType: 'custom_mood[][]',
+    qualified: true,
+    type: 'custom_mood',
+    dims: 2,
+    sql: "'{{sad,ok},{ok,happy}}'",
+    value: [
+      ['sad', 'ok'],
+      ['ok', 'happy'],
+    ],
+    updatedSql: "'{{sad,happy},{happy,ok}}'",
+    updatedValue: [
+      ['sad', 'happy'],
+      ['happy', 'ok'],
+    ],
+  },
+  {
+    name: 'domain_array',
+    sqlType: 'custom_positive[]',
+    qualified: true,
+    type: 'custom_positive',
+    dims: 1,
+    sql: "'{5,9,2}'",
+    value: ['5', '9', '2'],
+    updatedSql: "'{6,10,3}'",
+    updatedValue: ['6', '10', '3'],
+  },
+  {
+    name: 'composite_array',
+    sqlType: 'custom_complex[]',
+    qualified: true,
+    type: 'custom_complex',
+    dims: 1,
+    sql: `'{"(1.1,2.2)","(3.3,4.4)"}'`,
+    value: ['(1.1,2.2)', '(3.3,4.4)'],
+    updatedSql: `'{"(2.2,3.3)","(4.4,5.5)"}'`,
+    updatedValue: ['(2.2,3.3)', '(4.4,5.5)'],
+  },
   {
     name: 'small',
     sqlType: 'smallint',
@@ -243,6 +291,10 @@ const allCases = [
 ]
 
 const incrementalNames = new Set([
+  'enum_array',
+  'enum_matrix',
+  'domain_array',
+  'composite_array',
   'small',
   'integer',
   'big',
@@ -267,6 +319,20 @@ const incrementalNames = new Set([
   'matrix',
   'empty_array',
   'json_array',
+  'date',
+  'date_infinity',
+  'timestamp',
+  'timestamptz',
+  'time',
+  'timetz',
+  'interval',
+  'inet',
+  'cidr',
+  'macaddr',
+  'bits',
+  'varbits',
+  'range',
+  'point',
 ])
 for (const profile of ['incremental', 'extended'] as const) {
   const cases =
@@ -290,11 +356,6 @@ for (const profile of ['incremental', 'extended'] as const) {
           query_timeout: 15_000,
         })
         const relay = await recordRealtimeWire(required('NEON_REALTIME_URL'))
-        const source = createNeonRealtimeSource({
-          url: relay.url,
-          secret: required('NEON_REALTIME_SECRET'),
-          db: new URL(databaseUrl).pathname.slice(1),
-        })
         const namespace = `electric_types_${randomUUID().replaceAll('-', '')}`
         const table = `${quote(namespace)}.items`
         const schema = Object.fromEntries([
@@ -310,23 +371,8 @@ for (const profile of ['incremental', 'extended'] as const) {
         const checkpoints: { name: string; txid?: string; rows: unknown[] }[] =
           []
         let snapshot: PostgresSnapshot | undefined
-        const handler = createShapeHandler({
-          source,
-          longPollMs: 50,
-          async authorize(request) {
-            return {
-              authorizationKey: 'type-matrix',
-              definition: resolveConfiguredShape(new URL(request.url), [
-                {
-                  namespace,
-                  table: 'items',
-                  primaryKey: ['id'],
-                  columns: schema,
-                },
-              ]),
-            }
-          },
-        })
+        let initialHandle: string | undefined
+        let local: Awaited<ReturnType<typeof startLocalFunction>> | undefined
         try {
           await db.connect()
           // Match the documented Electric/Realtime wire settings for text oracles.
@@ -335,8 +381,13 @@ for (const profile of ['incremental', 'extended'] as const) {
             "set timezone='UTC'; set datestyle='ISO, YMD'; set intervalstyle='iso_8601'"
           )
           await db.query(`create schema ${quote(namespace)}`)
+          await db.query(`
+            create type ${quote(namespace)}.custom_mood as enum('sad','ok','happy');
+            create domain ${quote(namespace)}.custom_positive as integer check(value>0);
+            create type ${quote(namespace)}.custom_complex as (r double precision, i double precision)
+          `)
           await db.query(
-            `create table ${table}(id int primary key, ${cases.map((c) => `${quote(c.name)} ${c.sqlType}`).join(',')})`
+            `create table ${table}(id int primary key, ${cases.map((c) => `${quote(c.name)} ${'qualified' in c ? `${quote(namespace)}.` : ''}${c.sqlType}`).join(',')})`
           )
           await db.query(
             `insert into ${table} values(1,${cases.map((c) => c.sql).join(',')}),(2,${cases.map(() => 'NULL').join(',')})`
@@ -350,8 +401,20 @@ for (const profile of ['incremental', 'extended'] as const) {
             cases.map((c) => [c.name, 'value' in c ? c.value : oracle[c.name]])
           )
           const nulls = Object.fromEntries(cases.map((c) => [c.name, null]))
+          local = await startLocalFunction({
+            realtimeUrl: relay.url,
+            artifact: `types-${profile}-${replica}-${liveSse ? 'sse' : 'poll'}`,
+            tables: [
+              {
+                namespace,
+                table: 'items',
+                primaryKey: ['id'],
+                columns: schema,
+              },
+            ],
+          })
           const stream = new ShapeStream<Row<unknown>>({
-            url: 'http://local/proxy/shapes',
+            url: `${local.origin}/proxy/shapes`,
             params: { table: 'items', replica },
             liveSse,
             signal: abort.signal,
@@ -359,7 +422,8 @@ for (const profile of ['incremental', 'extended'] as const) {
               const request = new Request(input, init)
               expect(new URL(request.url).pathname).toBe('/proxy/shapes')
               expect(request.method).toBe('GET')
-              return handler.fetch(request)
+              expect(new URL(request.url).origin).toBe(local!.origin)
+              return fetch(request)
             },
             onError(error) {
               errors.push(error)
@@ -398,6 +462,15 @@ for (const profile of ['incremental', 'extended'] as const) {
               (a, b) => Number(a.id) - Number(b.id)
             )
             expect(rows).toEqual(expected)
+            if (profile === 'incremental') {
+              initialHandle ??= stream.shapeHandle
+              expect(stream.shapeHandle).toBe(initialHandle)
+              expect(
+                relay.messages.filter(
+                  (m) => (m as { type: string }).type === 'baseline_sync_end'
+                )
+              ).toHaveLength(1)
+            }
             checkpoints.push({ name, txid, rows })
           }
           await check('baseline', [
@@ -449,17 +522,58 @@ for (const profile of ['incremental', 'extended'] as const) {
             ],
             restoreTx
           )
+          const updatedCases = cases.filter((c) => 'updatedSql' in c)
+          const updatedGolden = {
+            ...golden,
+            ...Object.fromEntries(
+              updatedCases.map((c) => [
+                c.name,
+                'updatedValue' in c ? c.updatedValue : undefined,
+              ])
+            ),
+          }
+          const changedTx = (
+            await db.query(
+              `update ${table} set ${updatedCases.map((c) => `${quote(c.name)}=${'updatedSql' in c ? c.updatedSql : 'NULL'}`).join(',')} where id=2 returning pg_current_xact_id()::text as txid`
+            )
+          ).rows[0].txid as string
+          await check(
+            'custom arrays to different values',
+            [
+              { id: 1, ...nulls },
+              { id: 2, ...updatedGolden },
+            ],
+            changedTx
+          )
           const deleteTx = (
             await db.query(
               `delete from ${table} where id=2 returning pg_current_xact_id()::text as txid`
             )
           ).rows[0].txid as string
           await check('delete', [{ id: 1, ...nulls }], deleteTx)
+          if (profile === 'incremental') {
+            const live = messages
+              .filter(isChangeMessage)
+              .filter((message) => message.headers.txids?.length)
+            expect(live.map((message) => message.headers.operation)).toEqual([
+              'update',
+              'update',
+              'update',
+              'delete',
+            ])
+            if (replica === 'full') {
+              expect(live[1]).toMatchObject({ old_value: nulls })
+              expect(live[2]).toMatchObject({
+                old_value: Object.fromEntries(
+                  updatedCases.map((c) => [c.name, golden[c.name]])
+                ),
+              })
+            }
+          }
           expect(errors).toEqual([])
         } finally {
           abort.abort()
-          handler.close()
-          await handler.drain()
+          await local?.stop()
           await relay.close()
           await mkdir('.artifacts/staging', { recursive: true })
           await writeFile(

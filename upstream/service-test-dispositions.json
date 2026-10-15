@@ -141,7 +141,7 @@
       "scope": "Explicit comma/quote-bearing projection excludes the space-bearing column; real baseline/live SQL comparison keeps one shape epoch in polling and SSE.",
       "evidence": [
         "tests/integration/quoted-projection.test.ts",
-        "tests/integration/support/quoted-function.ts"
+        "tests/integration/support/configured-function.ts"
       ],
       "remaining": ""
     },

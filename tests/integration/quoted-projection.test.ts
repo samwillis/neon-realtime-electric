@@ -1,11 +1,7 @@
 import { randomUUID } from 'node:crypto'
-import { spawn, type ChildProcess } from 'node:child_process'
-import { createWriteStream } from 'node:fs'
-import { mkdir } from 'node:fs/promises'
-import { createServer } from 'node:net'
-import { once } from 'node:events'
 import { Client } from 'pg'
 import { afterAll, beforeAll, expect, it } from 'vitest'
+import { startLocalFunction } from './support/local-function.js'
 import {
   FetchError,
   Shape,
@@ -18,9 +14,8 @@ import {
 const schema = `electric_quoted_${randomUUID().replaceAll('-', '')}`
 const table = `"${schema}".items`
 let client: Client
-let child: ChildProcess | undefined
+let local: Awaited<ReturnType<typeof startLocalFunction>> | undefined
 let origin: string
-let output: ReturnType<typeof createWriteStream>
 
 beforeAll(async () => {
   if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is required')
@@ -34,72 +29,31 @@ beforeAll(async () => {
   await client.query(`create table ${table} (
     id int primary key, normal text, "has,comma" text,
     "has""quote" text, "has space" text)`)
-  await mkdir('.artifacts/staging', { recursive: true })
-  output = createWriteStream('.artifacts/staging/quoted-function.log')
-  const socket = createServer()
-  socket.listen(0, '127.0.0.1')
-  await once(socket, 'listening')
-  const port = (socket.address() as { port: number }).port
-  await new Promise<void>((resolve) => socket.close(() => resolve()))
-  origin = `http://127.0.0.1:${port}`
-  child = spawn(
-    'neon',
-    [
-      ...(process.env.NEON_CLI_PROFILE
-        ? ['--profile', process.env.NEON_CLI_PROFILE]
-        : []),
-      'dev',
-      '--source',
-      'tests/integration/support/quoted-function.ts',
-      '--port',
-      String(port),
+  if (!process.env.NEON_REALTIME_URL)
+    throw new Error('NEON_REALTIME_URL is required')
+  local = await startLocalFunction({
+    realtimeUrl: process.env.NEON_REALTIME_URL,
+    artifact: 'quoted',
+    tables: [
+      {
+        namespace: schema,
+        table: 'items',
+        primaryKey: ['id'],
+        columns: {
+          id: { type: 'int4' },
+          normal: { type: 'text' },
+          'has,comma': { type: 'text' },
+          'has"quote': { type: 'text' },
+          'has space': { type: 'text' },
+        },
+      },
     ],
-    {
-      env: { ...process.env, NEON_TEST_QUOTED_SCHEMA: schema },
-      stdio: ['ignore', 'pipe', 'pipe'],
-    }
-  )
-  child.stdout!.pipe(output, { end: false })
-  child.stderr!.pipe(output, { end: false })
-  let startupError: Error | undefined
-  child.once('error', (error) => {
-    startupError = error
   })
-  const deadline = Date.now() + 25_000
-  while (Date.now() < deadline) {
-    if (startupError) throw startupError
-    if (child.exitCode !== null || child.signalCode !== null)
-      throw new Error('neon dev exited before readiness')
-    try {
-      // HEAD validates the definition without creating a source owner.
-      const response = await fetch(`${origin}/proxy/shapes?table=items`, {
-        method: 'HEAD',
-        signal: AbortSignal.timeout(1000),
-      })
-      if (response.status === 404) return
-    } catch {
-      /* Server is still starting. */
-    }
-    await new Promise((resolve) => setTimeout(resolve, 100))
-  }
-  throw new Error('neon dev did not become ready')
+  origin = local.origin
 }, 35_000)
 
 afterAll(async () => {
-  if (child && child.exitCode === null && child.signalCode === null) {
-    child.kill('SIGTERM')
-    await Promise.race([
-      once(child, 'exit'),
-      new Promise<void>((resolve) => {
-        const timer = setTimeout(() => {
-          child!.kill('SIGKILL')
-          resolve()
-        }, 5000)
-        timer.unref()
-      }),
-    ])
-  }
-  output?.end()
+  await local?.stop()
   try {
     await client?.query(`drop schema if exists "${schema}" cascade`)
   } finally {

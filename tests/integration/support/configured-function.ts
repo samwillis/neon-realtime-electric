@@ -2,13 +2,19 @@ import {
   createNeonRealtimeSource,
   createShapeHandler,
   resolveConfiguredShape,
+  type ConfiguredTable,
 } from '../../../packages/server/src/index.js'
 
 function required(name: string): string {
   const value = process.env[name]
-  if (!value) throw new Error(`Quoted projection Function requires ${name}`)
+  if (!value) throw new Error(`Integration Function requires ${name}`)
   return value
 }
+// Test-only allowlist. The runner supplies isolated schema/column definitions;
+// no request can select an unconfigured table or change this configuration.
+const tables = JSON.parse(
+  required('NEON_TEST_SHAPE_CONFIG')
+) as ConfiguredTable[]
 const source = createNeonRealtimeSource({
   url: required('NEON_REALTIME_URL'),
   secret: required('NEON_REALTIME_SECRET'),
@@ -19,21 +25,8 @@ const handler = createShapeHandler({
   longPollMs: 500,
   async authorize(request) {
     return {
-      authorizationKey: 'quoted-projection-test',
-      definition: resolveConfiguredShape(new URL(request.url), [
-        {
-          namespace: required('NEON_TEST_QUOTED_SCHEMA'),
-          table: 'items',
-          primaryKey: ['id'],
-          columns: {
-            id: { type: 'int4' },
-            normal: { type: 'text' },
-            'has,comma': { type: 'text' },
-            'has"quote': { type: 'text' },
-            'has space': { type: 'text' },
-          },
-        },
-      ]),
+      authorizationKey: 'isolated-integration-test',
+      definition: resolveConfiguredShape(new URL(request.url), tables),
     }
   },
 })
