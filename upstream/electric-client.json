@@ -407,5 +407,8 @@
       "upstreamPath": "packages/typescript-client/vitest.unit.config.ts",
       "gitBlob": "f8b98e8bcc0370b9fb6a03c97592d8e18cb1828d"
     }
+  ],
+  "localModifications": [
+    "src/client.ts"
   ]
 }

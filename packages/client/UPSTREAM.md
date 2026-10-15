@@ -27,7 +27,22 @@ Workspace adaptations at the initial import:
   excluded suites require a real Electric service/Postgres/cache proxy; they are
   retained and tracked in `docs/compatibility.md`.
 
-The source, tests, fixtures, specification and build configuration are unchanged
-at this initial baseline. Transport edits must be recorded here separately, with
-their test disposition. The original package is an isolated test oracle, never
-a runtime dependency of this fork.
+The original package is an isolated test oracle, never a runtime dependency of
+this fork. Commit `133f2b1` is the verified pristine source/test baseline.
+
+## Phase 1 transport boundary
+
+- `src/client.ts`: uses a private `ShapeTransport` for reads and subset fetching.
+  URL construction, parsing/mapping, state transitions, retries, pause/refresh,
+  snapshot tracking and subscriber serialization remain in the shared client.
+- `src/transport/types.ts`: normalized metadata/read/snapshot callbacks; no new
+  public constructor option or export.
+- `src/transport/electric-http.ts`: the existing fetch wrapper chain, HTTP/SSE
+  consumption and snapshot decoding, kept as the reference adapter. It returns
+  metadata and raw messages, not synthetic HTTP responses.
+- All imported tests/fixtures remain unchanged. `src/client.ts` is explicitly
+  listed as a reviewed local modification in the import manifest; the importer
+  still reproduces its pristine upstream content in a fresh destination.
+
+The existing HTTP adapter is still selected during this refactor. It is not the
+final production transport; phase 2 selects the real Durable Streams reader.

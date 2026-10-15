@@ -7,7 +7,7 @@ local/staging test target, as agreed in `AGENTS.md`.
 | Phase | Status | Evidence / remaining gate |
 |---|---|---|
 | 0: pristine import and compatibility baseline | Passed | 80-file pinned import; 78 unchanged-file checks; build/typecheck; 553 runtime/declaration checks; identical packed consumers on TS 5.5.4/5.9.3; 62 exports across four declaration entry points |
-| 1: internal transport boundary | Pending | Original HTTP behavior and unchanged types must pass after refactor |
+| 1: internal transport boundary | Passed | HTTP adapter extracted; all 553 baseline checks, build/typecheck, packed consumers and 62-export declaration comparison pass |
 | 2: real Durable Streams delivery | Pending | Reference server, initialization barriers, sequences, proxy/read/reset tests |
 | 3: real staging Realtime | Pending | Ordered SDK evidence, raw values, filter membership and transaction acknowledgement |
 | 4: Function handler and lifecycle | Pending | Real handler through `neon dev`, local routing/failure tests |
@@ -57,3 +57,16 @@ it; `.github/workflows/compatibility.yml` defines Node 22/24 CI checks. CI itsel
 has not run remotely. The original service-dependent suites are retained but
 have not been run against a real Electric service; their disposition above stays
 explicit rather than being counted as passed.
+
+## Phase 1 evidence
+
+The private transport boundary now carries normalized response metadata, reads
+and raw snapshot data. The original URL builder, message parser/materializer,
+state machine, retry/reset, pause/refresh and subscriber serialization remain in
+the shared client. The reference HTTP adapter is still selected.
+
+After extraction, `pnpm typecheck`, `pnpm build`, `pnpm test:client` (553 tests),
+`pnpm test:package`, `pnpm check:api` and `pnpm lint` pass. All upstream tests remain
+unchanged. `pnpm check:upstream` verifies 77 untouched files and explicitly reports
+`src/client.ts` as a reviewed local source modification. Neither phase 1 nor its
+HTTP fixtures establish Durable Streams delivery; phase 2 must supply that proof.

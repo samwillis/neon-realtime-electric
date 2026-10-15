@@ -1,7 +1,6 @@
 import {
   Message,
   Offset,
-  Schema,
   Row,
   MaybePromise,
   GetExtensions,
@@ -35,15 +34,9 @@ import {
 import {
   BackoffDefaults,
   BackoffOptions,
-  consumeResponseBody,
   createFetchWithBackoff,
-  createFetchWithChunkBuffer,
-  createFetchWithConsumedMessages,
-  createFetchWithResponseHeadersCheck,
 } from './fetch'
 import {
-  CHUNK_LAST_OFFSET_HEADER,
-  LIVE_CACHE_BUSTER_HEADER,
   LIVE_CACHE_BUSTER_QUERY_PARAM,
   EXPIRED_HANDLE_QUERY_PARAM,
   COLUMNS_QUERY_PARAM,
@@ -51,7 +44,6 @@ import {
   OFFSET_QUERY_PARAM,
   SHAPE_HANDLE_HEADER,
   SHAPE_HANDLE_QUERY_PARAM,
-  SHAPE_SCHEMA_HEADER,
   WHERE_QUERY_PARAM,
   WHERE_PARAMS_PARAM,
   TABLE_QUERY_PARAM,
@@ -74,10 +66,8 @@ import {
   CACHE_BUSTER_QUERY_PARAM,
 } from './constants'
 import { compileExpression, compileOrderBy } from './expression-compiler'
-import {
-  EventSourceMessage,
-  fetchEventSource,
-} from '@microsoft/fetch-event-source'
+import { ElectricHttpTransport } from './transport/electric-http'
+import type { ResponseMetadata, ShapeTransport } from './transport/types'
 import { expiredShapesCache } from './expired-shapes-cache'
 import { upToDateTracker } from './up-to-date-tracker'
 import { SnapshotTracker } from './snapshot-tracker'
@@ -657,8 +647,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
   readonly options: ShapeStreamOptions<GetExtensions<T>>
   #error: unknown = null
 
-  readonly #fetchClient: typeof fetch
-  readonly #sseFetchClient: typeof fetch
+  readonly #transport: ShapeTransport<T>
   readonly #messageParser: MessageParser<T>
 
   readonly #subscribers = new Map<
@@ -808,11 +797,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
       backOffOpts
     )
 
-    this.#sseFetchClient = createFetchWithResponseHeadersCheck(
-      createFetchWithChunkBuffer(fetchWithBackoffClient)
-    )
-
-    this.#fetchClient = createFetchWithConsumedMessages(this.#sseFetchClient)
+    this.#transport = new ElectricHttpTransport<T>(fetchWithBackoffClient)
 
     this.#subscribeToVisibilityChanges()
   }
@@ -1389,9 +1374,8 @@ export class ShapeStream<T extends Row<unknown> = Row>
    * or `false` if the response was ignored (stale) and the body should be skipped.
    * Throws on stale-retry (to trigger a retry with cache buster).
    */
-  async #onInitialResponse(response: Response): Promise<boolean> {
-    const { headers, status } = response
-    const shapeHandle = headers.get(SHAPE_HANDLE_HEADER)
+  async #onInitialResponse(response: ResponseMetadata): Promise<boolean> {
+    const { status, handle: shapeHandle } = response
     const shapeKey = this.#currentFetchUrl
       ? canonicalShapeKey(this.#currentFetchUrl)
       : null
@@ -1421,9 +1405,9 @@ export class ShapeStream<T extends Row<unknown> = Row>
     const transition = this.#syncState.handleResponseMetadata({
       status,
       responseHandle: shapeHandle,
-      responseOffset: headers.get(CHUNK_LAST_OFFSET_HEADER) as Offset | null,
-      responseCursor: headers.get(LIVE_CACHE_BUSTER_HEADER),
-      responseSchema: getSchemaFromHeaders(headers),
+      responseOffset: response.offset,
+      responseCursor: response.cursor,
+      responseSchema: response.schema,
       expiredHandle,
       now: Date.now(),
       maxStaleCacheRetries: this.#maxStaleCacheRetries,
@@ -1444,7 +1428,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
     if (transition.action === `stale-retry`) {
       // Cancel the response body to release the connection before retrying.
-      await response.body?.cancel()
+      await response.cancel()
       if (transition.exceededMaxRetries) {
         if (shapeKey) {
           // Clear the expired entry — keeping it only poisons future sessions.
@@ -1689,45 +1673,54 @@ export class ShapeStream<T extends Row<unknown> = Row>
     requestAbortController: AbortController
     headers: Record<string, string>
   }): Promise<void> {
-    const { fetchUrl, requestAbortController, headers } = opts
-    const fetchUrlString = fetchUrl.toString()
-    const rawResponse = await this.#withRequestTimeout(
-      this.#sseFetchClient(fetchUrlString, {
-        signal: requestAbortController.signal,
-        headers,
-      }),
-      requestAbortController,
-      fetchUrl
-    )
-    const response = await consumeResponseBody(
-      rawResponse,
-      fetchUrlString,
-      requestAbortController.signal
-    )
+    return this.#readTransport(opts, `long-poll`)
+  }
 
-    this.#connected = true
-    const shouldProcessBody = await this.#onInitialResponse(response)
-    if (!shouldProcessBody) return
-
-    const schema = this.#syncState.schema! // we know that it is not undefined because it is set by `this.#onInitialResponse`
-    const res = await response.text()
-    const messages = res || `[]`
-    const batch = this.#messageParser.parse<Array<Message<T>>>(messages, schema)
-
-    if (!Array.isArray(batch)) {
-      const preview = bigintSafeStringify(batch)?.slice(0, 200)
-      throw new FetchError(
-        response.status,
-        `Received non-array response body from shape endpoint. ` +
-          `This may indicate a proxy or CDN is returning an unexpected response. ` +
-          `Expected a JSON array, got ${typeof batch}: ${preview}`,
-        undefined,
-        Object.fromEntries(response.headers.entries()),
-        fetchUrl.toString()
-      )
-    }
-
-    await this.#onMessages(batch)
+  async #readTransport(
+    opts: {
+      fetchUrl: URL
+      requestAbortController: AbortController
+      headers: Record<string, string>
+    },
+    mode: `long-poll` | `sse`
+  ): Promise<void> {
+    return this.#transport.read({
+      url: opts.fetchUrl,
+      headers: opts.headers,
+      signal: opts.requestAbortController.signal,
+      mode,
+      withTimeout: (promise) =>
+        this.#withRequestTimeout(
+          promise,
+          opts.requestAbortController,
+          opts.fetchUrl
+        ),
+      onMetadata: async (metadata) => {
+        this.#connected = true
+        return this.#onInitialResponse(metadata)
+      },
+      decode: (json, metadata, framing) => {
+        const parsed = this.#messageParser.parse<Message<T> | Message<T>[]>(
+          json,
+          this.#syncState.schema!
+        )
+        if (framing === `message`) return [parsed as Message<T>]
+        if (!Array.isArray(parsed)) {
+          const preview = bigintSafeStringify(parsed)?.slice(0, 200)
+          throw new FetchError(
+            metadata.status,
+            `Received non-array response body from shape endpoint. ` +
+              `This may indicate a proxy or CDN is returning an unexpected response. ` +
+              `Expected a JSON array, got ${typeof parsed}: ${preview}`,
+            undefined,
+            metadata.errorHeaders,
+            opts.fetchUrl.toString()
+          )
+        }
+        return parsed
+      },
+      onMessages: (messages, isSse) => this.#onMessages(messages, isSse),
+    })
   }
 
   async #requestShapeSSE(opts: {
@@ -1735,61 +1728,11 @@ export class ShapeStream<T extends Row<unknown> = Row>
     requestAbortController: AbortController
     headers: Record<string, string>
   }): Promise<void> {
-    const { fetchUrl, requestAbortController, headers } = opts
-    const fetch = this.#sseFetchClient
-
-    // Track when the SSE connection starts
+    const { requestAbortController } = opts
     this.#lastSseConnectionStartTime = Date.now()
-
-    // Add Accept header for SSE requests
-    const sseHeaders = {
-      ...headers,
-      Accept: `text/event-stream`,
-    }
-
-    let ignoredStaleResponse = false
     try {
-      let buffer: Array<Message<T>> = []
-      await fetchEventSource(fetchUrl.toString(), {
-        headers: sseHeaders,
-        fetch,
-        onopen: async (response: Response) => {
-          this.#connected = true
-          const shouldProcessBody = await this.#onInitialResponse(response)
-          if (!shouldProcessBody) {
-            ignoredStaleResponse = true
-            throw new Error(`stale response ignored`)
-          }
-        },
-        onmessage: (event: EventSourceMessage) => {
-          if (event.data) {
-            // event.data is a single JSON object
-            const schema = this.#syncState.schema! // we know that it is not undefined because it is set in onopen when we call this.#onInitialResponse
-            const message = this.#messageParser.parse<Message<T>>(
-              event.data,
-              schema
-            )
-            buffer.push(message)
-
-            if (isUpToDateMessage(message)) {
-              // Flush the buffer on up-to-date message.
-              // Ensures that we only process complete batches of operations.
-              this.#onMessages(buffer, true)
-              buffer = []
-            }
-          }
-        },
-        onerror: (error: Error) => {
-          // rethrow to close the SSE connection
-          throw error
-        },
-        signal: requestAbortController.signal,
-      })
+      await this.#readTransport(opts, `sse`)
     } catch (error) {
-      if (ignoredStaleResponse) {
-        // Stale response was ignored in onopen — let the fetch loop retry
-        return
-      }
       if (requestAbortController.signal.aborted) {
         // An abort during SSE stream parsing produces a raw AbortError
         // instead of going through createFetchWithBackoff -- wrap it so
@@ -2296,9 +2239,13 @@ export class ShapeStream<T extends Row<unknown> = Row>
     // Capture handle before fetch to avoid race conditions if it changes during the request
     const usedHandle = this.#syncState.handle
 
-    let response: Response
+    let snapshot: Awaited<ReturnType<ShapeTransport<T>[`fetchSnapshot`]>>
     try {
-      response = await this.#fetchClient(fetchUrl.toString(), fetchOptions)
+      snapshot = await this.#transport.fetchSnapshot({
+        url: fetchUrl,
+        init: fetchOptions,
+        schema: this.#syncState.schema,
+      })
     } catch (e) {
       // Handle 409 "must-refetch" - shape handle changed/expired.
       // The fetch wrapper throws FetchError for non-OK responses, so we catch here.
@@ -2346,27 +2293,13 @@ export class ShapeStream<T extends Row<unknown> = Row>
       throw e
     }
 
-    // Handle non-OK responses from custom fetch clients that bypass the wrapper chain
-    if (!response.ok) {
-      throw await FetchError.fromResponse(response, fetchUrl.toString())
-    }
-
-    const schema: Schema =
-      this.#syncState.schema ??
-      getSchemaFromHeaders(response.headers, {
-        required: true,
-        url: fetchUrl.toString(),
-      })
-
-    const { metadata, data: rawData } = await response.json()
+    const { metadata, rawData, response } = snapshot
     const data = this.#messageParser.parseSnapshotData<ChangeMessage<T>>(
       rawData,
-      schema
+      response.schema!
     )
-
-    const responseOffset =
-      (response.headers.get(CHUNK_LAST_OFFSET_HEADER) as Offset) || null
-    const responseHandle = response.headers.get(SHAPE_HANDLE_HEADER)
+    const responseOffset = response.offset || null
+    const responseHandle = response.handle
 
     return { metadata, data, responseOffset, responseHandle }
   }
@@ -2414,29 +2347,6 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
     return body
   }
-}
-
-/**
- * Extracts the schema from response headers.
- * @param headers - The response headers
- * @param options - Options for schema extraction
- * @param options.required - If true, throws MissingHeadersError when header is missing. Defaults to false.
- * @param options.url - The URL to include in the error message if required is true
- * @returns The parsed schema, or an empty object if not required and header is missing
- * @throws {MissingHeadersError} if required is true and the header is missing
- */
-function getSchemaFromHeaders(
-  headers: Headers,
-  options?: { required?: boolean; url?: string }
-): Schema {
-  const schemaHeader = headers.get(SHAPE_SCHEMA_HEADER)
-  if (!schemaHeader) {
-    if (options?.required && options?.url) {
-      throw new MissingHeadersError(options.url, [SHAPE_SCHEMA_HEADER])
-    }
-    return {}
-  }
-  return JSON.parse(schemaHeader)
 }
 
 /**

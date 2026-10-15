@@ -31,7 +31,13 @@ await Promise.all(
     while (next < manifest.files.length) {
       const entry = manifest.files[next++]
       const target = path.join(destination, entry.path)
-      if (checking && manifest.workspaceAdaptations.includes(entry.path))
+      if (
+        checking &&
+        [
+          ...manifest.workspaceAdaptations,
+          ...(manifest.localModifications ?? []),
+        ].includes(entry.path)
+      )
         continue
       const bytes = checking
         ? await readFile(target)
@@ -54,6 +60,11 @@ await Promise.all(
 console.log(
   `${checking ? 'Verified' : 'Imported'} ${checked} upstream files at ${manifest.revision}`
 )
+if (checking && manifest.localModifications?.length) {
+  console.log(
+    `Reviewed local source changes (not checked as pristine): ${manifest.localModifications.join(', ')}`
+  )
+}
 
 async function download(upstreamPath) {
   const url = `https://raw.githubusercontent.com/electric-sql/electric/${manifest.revision}/${upstreamPath}`
