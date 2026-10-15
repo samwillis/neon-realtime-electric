@@ -11,6 +11,7 @@ import type {
 import { ObjectShapeLog } from '../../packages/server/src/object-log.js'
 import { FixtureObjectStore } from './support/object-store.js'
 import { decodeReadProof } from '../../packages/protocol/src/read-proof.js'
+import { normalizeHeaders } from '../../packages/client/src/transport/durable-streams.js'
 
 const cleanup: (() => unknown)[] = []
 afterEach(async () => {
@@ -102,6 +103,84 @@ describe.each(['memory', 'objects'])(
   'Function-compatible shape read handler: %s',
   (backend) => {
     const createFixture = () => fixture(backend === 'objects')
+    it('rejects ambiguous read parameters before allocating an owner', async () => {
+      const f = createFixture()
+      for (const params of [
+        'offset=-1&offset=-1',
+        'handle=a&handle=b',
+        'cursor=1&cursor=2',
+        'live=true&live=sse',
+        'live_sse=true&live_sse=false',
+        'experimental_live_sse=true&experimental_live_sse=false',
+        'offset=',
+        'offset=some%20offset',
+        'offset=a%2Cb',
+        'live=long-poll',
+        'live=true',
+      ]) {
+        const response = await f.request(params)
+        expect(response.status, params).toBe(400)
+        expect(response.headers.get('x-content-type-options')).toBe('nosniff')
+        expect(f.handler.activeShapes).toBe(0)
+      }
+    })
+    it('advances native long-poll cursors for data and timeout through Electric header allowlists', async () => {
+      const f = createFixture()
+      const first = await f.request('offset=-1&live=long-poll')
+      const handle = first.headers.get('electric-handle')!
+      expect(first.status).toBe(200)
+      const cursor = first.headers.get('Stream-Cursor')!
+      expect(cursor).toMatch(/^\d+$/)
+      expect(
+        decodeReadProof(first.headers.get('electric-cursor')).nativeCursor
+      ).toBe(cursor)
+      const future = String(Number(cursor) + 10_000)
+      const second = await f.request(
+        `handle=${handle}&offset=-1&live=true&cursor=${future}`
+      )
+      expect(BigInt(second.headers.get('Stream-Cursor')!)).toBeGreaterThan(
+        BigInt(future)
+      )
+      const tail = first.headers.get('Stream-Next-Offset')!
+      const timeout = await f.request(
+        `handle=${handle}&offset=${tail}&live=long-poll&cursor=${encodeURIComponent(second.headers.get('electric-cursor')!)}`
+      )
+      expect(timeout.status).toBe(204)
+      expect(timeout.headers.get('Stream-Up-To-Date')).toBe('true')
+      expect(timeout.headers.get('Stream-Next-Offset')).toBe(tail)
+      expect(BigInt(timeout.headers.get('Stream-Cursor')!)).toBeGreaterThan(
+        BigInt(second.headers.get('Stream-Cursor')!)
+      )
+      // An unchanged Electric-only proxy still supplies the native reader with
+      // a numeric cursor, alongside the original immutable read-boundary proof.
+      const allowed = new Headers()
+      for (const [name, value] of timeout.headers)
+        if (name.startsWith('electric-')) allowed.set(name, value)
+      const normalized = normalizeHeaders(
+        new Response(null, { status: 204, headers: allowed })
+      )
+      expect(normalized.headers.get('Stream-Cursor')).toBe(
+        timeout.headers.get('Stream-Cursor')
+      )
+      const proof = decodeReadProof(normalized.headers.get('electric-cursor'))
+      expect(proof.offset).toBe(tail)
+      expect(proof.afterSeq).toBe('1')
+      expect(proof.baselineComplete).toBe(false)
+      for (const invalid of ['invalid', 'neon1.invalid', '9'.repeat(400)]) {
+        const response = await f.request(
+          `handle=${handle}&offset=-1&live=long-poll&cursor=${invalid}`
+        )
+        expect(response.headers.get('Stream-Cursor')).toMatch(/^\d+$/)
+        if (/^\d+$/.test(invalid))
+          expect(
+            BigInt(response.headers.get('Stream-Cursor')!)
+          ).toBeGreaterThan(BigInt(invalid))
+      }
+      expect(timeout.headers.get('cache-control')).toBe('no-store')
+      expect(timeout.headers.get('cross-origin-resource-policy')).toBe(
+        'cross-origin'
+      )
+    })
     it('reports captured in-process row/log counts without exposing source values', async () => {
       const f = createFixture()
       const first = await f.request('offset=-1')

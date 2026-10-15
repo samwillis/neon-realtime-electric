@@ -292,3 +292,21 @@ their limits. The server suite passes 114 checks; transport checks remain 59.
 The local performance gate passes for this measured profile. Subsets, complete
 type/event equivalence, native server conformance and the comprehensive phase
 exit audit still prevent full phase 7 acceptance.
+
+## Native long-poll protocol checks
+
+The handler emits numeric `Stream-Cursor` values on data and timeout responses,
+advances caller cursors on collisions and embeds the native cursor in the
+Electric read-boundary proof so existing header allowlists preserve it. Repeated
+read-position/mode parameters, empty or malformed offsets, and long polling
+without an offset return HTTP 400 before allocating an owner. Responses include
+`nosniff`, cross-origin resource policy and `no-store` headers.
+
+The server suite passes 118 checks across both storage backends. These are local
+protocol regression checks, not the still-outstanding pinned native server
+conformance suite. Importing the reference server's cursor export into the
+Function brought in an LMDB native loader and failed under `neon dev`. The small
+Function-safe cursor helper follows its interval/jitter rules using integer
+arithmetic; the reference server remains a test dependency.
+The resulting Function starts under `neon dev`; real polling/SSE mode checks and
+a direct numeric/proof-cursor monotonicity probe pass against staging services.

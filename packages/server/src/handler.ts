@@ -1,7 +1,11 @@
 import { InvalidLogOffsetError } from './shape-log.js'
 import { ShapeDefinitionError } from './definition.js'
 import { createHash } from 'node:crypto'
-import { encodeReadProof } from '@neon/realtime-electric-protocol/read-proof'
+import {
+  decodeReadProof,
+  encodeReadProof,
+} from '@neon/realtime-electric-protocol/read-proof'
+import { generateResponseCursor } from './cursor.js'
 import {
   SourceQueryRejectedError,
   type RealtimeSource,
@@ -45,6 +49,8 @@ export function createShapeHandler(options: ShapeHandlerOptions) {
   let cleanupError: Error | undefined
   const cors = {
     'access-control-allow-origin': '*',
+    'x-content-type-options': 'nosniff',
+    'cross-origin-resource-policy': 'cross-origin',
     'access-control-expose-headers':
       'electric-handle,electric-offset,electric-cursor,electric-schema,electric-up-to-date,Stream-Next-Offset,Stream-Up-To-Date,Stream-Cursor,Stream-Expires-At',
     'cache-control': 'no-store',
@@ -174,11 +180,42 @@ export function createShapeHandler(options: ShapeHandlerOptions) {
         )
         .digest('hex')
       const url = new URL(request.url)
+      for (const name of [
+        'handle',
+        'offset',
+        'cursor',
+        'live',
+        'live_sse',
+        'experimental_live_sse',
+      ]) {
+        if (url.searchParams.getAll(name).length > 1)
+          return Response.json(
+            { error: `Repeated ${name} parameter` },
+            { status: 400, headers: cors }
+          )
+      }
+      const requestedOffset = url.searchParams.get('offset')
+      if (
+        requestedOffset !== null &&
+        (!requestedOffset || /[\s,]/.test(requestedOffset))
+      )
+        return Response.json(
+          { error: 'Invalid shape offset' },
+          { status: 400, headers: cors }
+        )
       const isSse =
         url.searchParams.get('live') === 'sse' ||
         (url.searchParams.get('live') === 'true' &&
           (url.searchParams.get('live_sse') === 'true' ||
             url.searchParams.get('experimental_live_sse') === 'true'))
+      const isLongPoll =
+        !isSse &&
+        ['true', 'long-poll'].includes(url.searchParams.get('live') ?? '')
+      if (request.method === 'GET' && isLongPoll && requestedOffset === null)
+        return Response.json(
+          { error: 'Long polling requires an offset' },
+          { status: 400, headers: cors }
+        )
       let handle = url.searchParams.get('handle')
       let entry = handle ? owners.get(handle) : undefined
       if (handle && !entry) return refetch(authorized, identity, request.method)
@@ -239,9 +276,8 @@ export function createShapeHandler(options: ShapeHandlerOptions) {
       }
       if (
         request.method === 'GET' &&
-        !isSse &&
-        read.envelopes.length === 0 &&
-        ['true', 'long-poll'].includes(url.searchParams.get('live') ?? '')
+        isLongPoll &&
+        read.envelopes.length === 0
       ) {
         await owner.log.wait(
           readOffset,
@@ -274,6 +310,19 @@ export function createShapeHandler(options: ShapeHandlerOptions) {
         return failedOwner(owner, error, authorized, identity, request.method)
       }
       const end = request.method === 'HEAD' ? owner.log.head : read.end
+      let clientCursor = url.searchParams.get('cursor') ?? undefined
+      // Existing Electric proxies forward the proof-bearing cursor. Recover its
+      // native cache cursor while keeping sequence/cut evidence independent.
+      if (clientCursor?.startsWith('neon1.')) {
+        try {
+          clientCursor = decodeReadProof(clientCursor).nativeCursor
+        } catch {
+          clientCursor = undefined
+        }
+      }
+      const nativeCursor = isLongPoll
+        ? generateResponseCursor(clientCursor)
+        : undefined
       const headers = new Headers({
         ...cors,
         'content-type': 'application/json',
@@ -286,8 +335,10 @@ export function createShapeHandler(options: ShapeHandlerOptions) {
           offset,
           afterSeq: read.boundary.afterSeq,
           baselineComplete: read.boundary.baselineComplete,
+          ...(nativeCursor ? { nativeCursor } : {}),
         }),
       })
+      if (nativeCursor) headers.set('Stream-Cursor', nativeCursor)
       if (owner.schema)
         headers.set('electric-schema', JSON.stringify(owner.schema))
       if (read.atTail) {
