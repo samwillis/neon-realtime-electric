@@ -10,7 +10,7 @@ local/staging test target, as agreed in `AGENTS.md`.
 | 1: internal transport boundary                | Passed                                 | HTTP adapter extracted; all 553 baseline checks, build/typecheck, packed consumers and 62-export declaration comparison pass                                                                                                            |
 | 2: real Durable Streams delivery              | Implemented; final gate audit pending  | Real reader/reference server; 59 native/protocol tests, 18 packed proxy tests, consumer/lifecycle conformance and clean patch install; early real staging/Function no-reader lifecycle now passes                                       |
 | 3: real staging Realtime                      | Implemented in part; live gate passed  | Pinned SDK evidence patch, source adapter, serialized owner and WHERE passthrough; real baseline/live publications and transaction evidence pass after enabling logical replication; see docs/staging-publication-investigation.md |
-| 4: Function handler and lifecycle             | Implemented in part; gates outstanding | Fetch read/HEAD/DELETE/long-poll/SSE handler, 156 server checks; selected native JSON read/store conformance passes; staging snapshot/lifecycle through `neon dev` and controlled owner routing pass; final gate audit outstanding |
+| 4: Function handler and lifecycle             | Implemented in part; gates outstanding | Fetch read/HEAD/DELETE/long-poll/SSE handler, 164 server checks; selected native JSON read/store conformance passes; staging snapshot/lifecycle through `neon dev` and controlled owner routing pass; final gate audit outstanding |
 | 5: Object Storage                             | Implemented in part; gates outstanding | Shared memory/object index and replay tests, real S3 SDK/HTTP fixture, live staging Object Storage replay/cleanup pass; local object-backed baseline/lifecycle pass; real local 15-minute expiry/refetch run passes                        |
 | 6: replacement package/integrations           | Implemented; gate audit pending        | Fresh packed original/candidate React/TanStack builds and TS 5.5/5.9 compilation; Chrome baseline/live/auth/refetch and optimistic real tx acknowledgement pass                                                                         |
 | 7: complete API expansion                     | Implemented in part                                | SSE, replica modes, changes-only/now, WHERE passthrough, expanded real type matrix and native-reader mobile lifecycle gates implemented; complete types/events, subsets and exact MVCC/cut reconciliation remain                                                                                                                   |
@@ -360,3 +360,27 @@ precede the transformer for both baseline rows and sparse live updates.
 These checks add production transport evidence alongside the retained HTTP
 reference tests. They do not complete the historical test disposition audit or
 enable the remaining subset/source-dependent gates.
+
+## SSE reconnect and fallback behavior
+
+Eight additional production handler/native-reader checks run across memory/object
+logs and native/Electric-only response headers. Every native SSE reconnect keeps
+both Electric SSE query flags. Three genuinely short connections select polling;
+that decision survives a forced refresh of the same handle and resets after
+owner loss. Refresh-aborted connections do not count toward the threshold.
+The server suite now has 164 checks.
+
+These tests found two adapter defects: reconnects lost their SSE flags, and the
+facade restarted SSE after the pinned reader ended its session on fallback.
+The adapter now reconstructs the mode flags on every native request and passes
+the reader's completed fallback decision to the facade. The native reader owns
+its reconnect attempts; the facade retains that decision for the shape epoch.
+The public API and configured URL/query-string handle contract are unchanged.
+
+Validation also passes build/lint/strict types, the 553 imported and 59 transport
+checks, the selected 64-check native JSON profile, packed aliases/interoperability,
+18 unchanged proxy checks and original/candidate integration builds. A fresh
+`neon dev` instance with real staging Realtime/Object Storage passes baseline,
+resume, polling/SSE mode checks and all eight basic/custom/React/TanStack browser
+scenarios, including auth refresh, live writes and refetch. This remains local
+Function evidence, with no deployed affinity claim.

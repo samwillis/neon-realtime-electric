@@ -64,3 +64,10 @@ the distributed client or its constructor options.
   `docs/wire-protocol.md` at the repository root.
 - Imported test files are unchanged. New HTTP-reference factory selection lives
   in a separate test helper/config; native-reader tests live outside that suite.
+
+The URL adapter reconstructs Electric SSE flags on every native reconnect.
+The pinned reader closes its SSE session after its short-connection fallback
+guard triggers; a private transport callback retains that decision across
+facade refreshes until the shape resets. Native lifecycle tests cover the exact
+threshold, refresh cancellation and owner-loss reset across both log backends
+and native/Electric-only headers. Rerun these when updating the reader.

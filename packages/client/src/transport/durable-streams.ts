@@ -87,6 +87,13 @@ export class DurableStreamsTransport<T extends Row<unknown>>
       const live = nativeUrl.searchParams.get('live')
       if (live === 'long-poll' || live === 'sse')
         outward.searchParams.set('live', 'true')
+      if (live === 'sse') {
+        outward.searchParams.set('live_sse', 'true')
+        outward.searchParams.set('experimental_live_sse', 'true')
+      } else if (live === 'long-poll') {
+        outward.searchParams.delete('live_sse')
+        outward.searchParams.delete('experimental_live_sse')
+      }
       const cursor = nativeUrl.searchParams.get('cursor')
       if (cursor && !outward.searchParams.has('cursor'))
         outward.searchParams.set('cursor', cursor)
@@ -230,6 +237,16 @@ export class DurableStreamsTransport<T extends Row<unknown>>
       })
       await session.closed
       if (resolutionFailure) throw resolutionFailure.error
+      // The pinned reader ends its SSE session when its three-short-connection
+      // guard selects polling. Keep that decision across facade refreshes;
+      // otherwise the outer SSE lifecycle starts three more native attempts.
+      if (
+        request.mode === 'sse' &&
+        sseResponse &&
+        !request.signal.aborted &&
+        !session.streamClosed
+      )
+        request.onSseFallback?.()
       // Pace temporary initialization tails so they do not trip the common
       // client's stale-cache loop guard or spin while the baseline is built.
       if (!this.#consumer!.state.ready) await pause(150, request.signal)

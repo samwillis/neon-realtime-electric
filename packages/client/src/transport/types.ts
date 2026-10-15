@@ -20,6 +20,8 @@ export interface ReadRequest<T extends Row<unknown>> {
   resolveRequest(): Promise<{ url: URL; headers: Record<string, string> }>
   withTimeout<U>(promise: Promise<U>): Promise<U>
   onMetadata(metadata: ResponseMetadata): Promise<boolean>
+  /** Persist a native reader's fallback until this shape epoch resets. */
+  onSseFallback?(): void
   decode(
     json: string,
     metadata: ResponseMetadata,

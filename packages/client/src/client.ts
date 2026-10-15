@@ -682,6 +682,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
   #pauseLock: PauseLock
   #currentFetchUrl?: URL // Current fetch URL for computing shape key
   #lastSseConnectionStartTime?: number
+  #transportSseFallback = false
   #minSseConnectionDuration = 1000 // Minimum expected SSE connection duration (1 second)
   #maxShortSseConnections = 3 // Fall back to long polling after this many short connections
   #sseBackoffBaseDelay = 100 // Base delay for exponential backoff (ms)
@@ -1613,6 +1614,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
     const useSse = this.options.liveSse ?? this.options.experimentalLiveSse
     if (
+      !this.#transportSseFallback &&
       this.#syncState.shouldUseSse({
         liveSseEnabled: !!useSse,
         isRefreshing: this.#isRefreshing,
@@ -1696,6 +1698,9 @@ export class ShapeStream<T extends Row<unknown> = Row>
       onMetadata: async (metadata) => {
         this.#connected = true
         return this.#onInitialResponse(metadata)
+      },
+      onSseFallback: () => {
+        this.#transportSseFallback = true
       },
       decode: (json, metadata, framing) => {
         const parsed = this.#messageParser.parse<Message<T> | Message<T>[]>(
@@ -2067,6 +2072,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
    * shape handle
    */
   #reset(handle?: string) {
+    this.#transportSseFallback = false
     this.#syncState = this.#syncState.markMustRefetch(handle)
     this.#connected = false
     // releaseAllMatching intentionally doesn't fire onReleased — every caller
