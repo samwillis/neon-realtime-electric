@@ -1,6 +1,17 @@
 import { defineConfig } from 'vitest/config'
+import { fileURLToPath } from 'node:url'
 
 export default defineConfig({
+  resolve: {
+    alias: [
+      {
+        find: './transport/create',
+        replacement: fileURLToPath(
+          new URL('./test/reference-transport.ts', import.meta.url)
+        ),
+      },
+    ],
+  },
   test: {
     setupFiles: ['vitest-localstorage-mock'],
     include: ['test/**/*.test.ts'],

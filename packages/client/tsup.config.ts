@@ -9,7 +9,11 @@ export default defineConfig((options) => {
     },
     tsconfig: `./tsconfig.build.json`,
     sourcemap: true,
-    noExternal: [`@microsoft/fetch-event-source`],
+    noExternal: [
+      `@microsoft/fetch-event-source`,
+      `@durable-streams/client`,
+      `@neon/realtime-electric-protocol`,
+    ],
     external: [`react-native`],
     ...options,
   }

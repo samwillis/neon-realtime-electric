@@ -409,6 +409,7 @@
     }
   ],
   "localModifications": [
-    "src/client.ts"
+    "src/client.ts",
+    "tsup.config.ts"
   ]
 }

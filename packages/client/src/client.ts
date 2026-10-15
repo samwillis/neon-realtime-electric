@@ -31,11 +31,7 @@ import {
   MissingHeadersError,
   StaleCacheError,
 } from './error'
-import {
-  BackoffDefaults,
-  BackoffOptions,
-  createFetchWithBackoff,
-} from './fetch'
+import { BackoffDefaults, BackoffOptions } from './fetch'
 import {
   LIVE_CACHE_BUSTER_QUERY_PARAM,
   EXPIRED_HANDLE_QUERY_PARAM,
@@ -66,7 +62,7 @@ import {
   CACHE_BUSTER_QUERY_PARAM,
 } from './constants'
 import { compileExpression, compileOrderBy } from './expression-compiler'
-import { ElectricHttpTransport } from './transport/electric-http'
+import { createShapeTransport } from './transport/create'
 import type { ResponseMetadata, ShapeTransport } from './transport/types'
 import { expiredShapesCache } from './expired-shapes-cache'
 import { upToDateTracker } from './up-to-date-tracker'
@@ -792,12 +788,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
       multiplier: backOffOpts.multiplier,
     }
 
-    const fetchWithBackoffClient = createFetchWithBackoff(
-      baseFetchClient,
-      backOffOpts
-    )
-
-    this.#transport = new ElectricHttpTransport<T>(fetchWithBackoffClient)
+    this.#transport = createShapeTransport<T>(baseFetchClient, backOffOpts)
 
     this.#subscribeToVisibilityChanges()
   }
@@ -1689,6 +1680,13 @@ export class ShapeStream<T extends Row<unknown> = Row>
       headers: opts.headers,
       signal: opts.requestAbortController.signal,
       mode,
+      resolveRequest: async () => {
+        const { fetchUrl, requestHeaders } = await this.#constructUrl(
+          this.options.url,
+          false
+        )
+        return { url: fetchUrl, headers: requestHeaders }
+      },
       withTimeout: (promise) =>
         this.#withRequestTimeout(
           promise,

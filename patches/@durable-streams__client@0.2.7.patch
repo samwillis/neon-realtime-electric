@@ -1,0 +1,121 @@
+diff --git a/dist/index.cjs b/dist/index.cjs
+index aa19392a0d75ffb4acfe8a5af702425e9aee9deb..534a5ad889d7e6444cef59068c5923ab17e4f556 100644
+--- a/dist/index.cjs
++++ b/dist/index.cjs
+@@ -1403,7 +1403,7 @@ var StreamResponseImpl = class {
+ 			try {
+ 				let result = await reader.read();
+ 				while (!result.done) {
+-					if (abortController.signal.aborted) break;
++					if (abortController.signal.aborted || this.#abortController.signal.aborted) break;
+ 					const response = result.value;
+ 					const { offset, cursor, upToDate, streamClosed } = getMetadataFromResponse(response, this.offset, this.cursor, this.streamClosed);
+ 					const text = await response.text();
+@@ -1427,15 +1427,20 @@ var StreamResponseImpl = class {
+ 				}
+ 				this.#markClosed();
+ 			} catch (e) {
+-				const isAborted = abortController.signal.aborted;
+-				const isBodyError = e instanceof TypeError && String(e).includes(`Body`);
+-				if (!isAborted && !isBodyError) this.#markError(e instanceof Error ? e : new Error(String(e)));
+-				else this.#markClosed();
++				const isAborted = abortController.signal.aborted || this.#abortController.signal.aborted;
++				this.#markClosed();
++				if (!isAborted) {
++					this.#abortController.abort(e);
++					throw e;
++				}
+ 			} finally {
+ 				reader.releaseLock();
+ 			}
+ 		};
+-		consumeJsonSubscription();
++		// Producer closure can precede body parsing and asynchronous callbacks.
++		// For JSON subscriptions, closed observes consumption rather than prefetch.
++		this.#closed.catch(() => {});
++		this.#closed = consumeJsonSubscription();
+ 		return () => {
+ 			abortController.abort();
+ 			this.cancel();
+diff --git a/dist/index.js b/dist/index.js
+index 9f1c86c6e31a140ae98d870c4a95ddb28f8a4aa0..f31170492c4f2c246ae5de77ce8942594b328f19 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -1401,7 +1401,7 @@ var StreamResponseImpl = class {
+ 			try {
+ 				let result = await reader.read();
+ 				while (!result.done) {
+-					if (abortController.signal.aborted) break;
++					if (abortController.signal.aborted || this.#abortController.signal.aborted) break;
+ 					const response = result.value;
+ 					const { offset, cursor, upToDate, streamClosed } = getMetadataFromResponse(response, this.offset, this.cursor, this.streamClosed);
+ 					const text = await response.text();
+@@ -1425,15 +1425,20 @@ var StreamResponseImpl = class {
+ 				}
+ 				this.#markClosed();
+ 			} catch (e) {
+-				const isAborted = abortController.signal.aborted;
+-				const isBodyError = e instanceof TypeError && String(e).includes(`Body`);
+-				if (!isAborted && !isBodyError) this.#markError(e instanceof Error ? e : new Error(String(e)));
+-				else this.#markClosed();
++				const isAborted = abortController.signal.aborted || this.#abortController.signal.aborted;
++				this.#markClosed();
++				if (!isAborted) {
++					this.#abortController.abort(e);
++					throw e;
++				}
+ 			} finally {
+ 				reader.releaseLock();
+ 			}
+ 		};
+-		consumeJsonSubscription();
++		// Producer closure can precede body parsing and asynchronous callbacks.
++		// For JSON subscriptions, closed observes consumption rather than prefetch.
++		this.#closed.catch(() => {});
++		this.#closed = consumeJsonSubscription();
+ 		return () => {
+ 			abortController.abort();
+ 			this.cancel();
+diff --git a/src/response.ts b/src/response.ts
+index e751a3d6c051652b7192a1c6356be0d845e2fd98..c6c96164e7dc6dae96dadade600f387fd3c1b1ac 100644
+--- a/src/response.ts
++++ b/src/response.ts
+@@ -1145,7 +1145,7 @@ export class StreamResponseImpl<
+       try {
+         let result = await reader.read()
+         while (!result.done) {
+-          if (abortController.signal.aborted) break
++          if (abortController.signal.aborted || this.#abortController.signal.aborted) break
+ 
+           // Get metadata from Response headers (not from `this` which may be stale)
+           const response = result.value
+@@ -1186,20 +1186,21 @@ export class StreamResponseImpl<
+         }
+         this.#markClosed()
+       } catch (e) {
+-        // Ignore abort-related and body-consumed errors
+-        const isAborted = abortController.signal.aborted
+-        const isBodyError = e instanceof TypeError && String(e).includes(`Body`)
+-        if (!isAborted && !isBodyError) {
+-          this.#markError(e instanceof Error ? e : new Error(String(e)))
+-        } else {
+-          this.#markClosed()
++        const isAborted = abortController.signal.aborted || this.#abortController.signal.aborted
++        this.#markClosed()
++        if (!isAborted) {
++          this.#abortController.abort(e)
++          throw e
+         }
+       } finally {
+         reader.releaseLock()
+       }
+     }
+ 
+-    consumeJsonSubscription()
++    // Producer closure can precede body parsing and asynchronous callbacks.
++    // For JSON subscriptions, closed observes consumption rather than prefetch.
++    this.#closed.catch(() => {})
++    this.#closed = consumeJsonSubscription()
+ 
+     return () => {
+       abortController.abort()

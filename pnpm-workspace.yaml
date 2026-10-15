@@ -5,3 +5,6 @@ packages:
 
 onlyBuiltDependencies:
   - esbuild
+
+patchedDependencies:
+  '@durable-streams/client@0.2.7': patches/@durable-streams__client@0.2.7.patch

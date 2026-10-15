@@ -44,5 +44,23 @@ this fork. Commit `133f2b1` is the verified pristine source/test baseline.
   listed as a reviewed local modification in the import manifest; the importer
   still reproduces its pristine upstream content in a fresh destination.
 
-The existing HTTP adapter is still selected during this refactor. It is not the
-final production transport; phase 2 selects the real Durable Streams reader.
+The HTTP adapter was selected for the phase 1 commit. Phase 2 selects the real
+Durable Streams reader in production. The baseline Vitest configuration aliases
+only the private transport factory to `test/reference-transport.ts`, retaining
+the original HTTP fixtures and their application assertions. It does not change
+the distributed client or its constructor options.
+
+## Phase 2 delivery
+
+- `src/client.ts` selects the private factory using the original custom fetch and
+  backoff settings. Native catch-up requests can reevaluate dynamic auth/params.
+- `src/transport/durable-streams.ts` uses real `stream`/`subscribeJson` sessions,
+  normalized metadata aliases, logged baseline barriers and committed replay
+  checkpoints. It translates reader errors to the existing exported errors.
+- `tsup.config.ts` bundles the private protocol and patched reader so consumers
+  install a usable artifact without workspace links or local patch settings.
+- `THIRD_PARTY_NOTICES.md` records bundled dependency attribution and the reader
+  lifecycle change. The reader patch and its verification are described in
+  `docs/wire-protocol.md` at the repository root.
+- Imported test files are unchanged. New HTTP-reference factory selection lives
+  in a separate test helper/config; native-reader tests live outside that suite.

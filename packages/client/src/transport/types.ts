@@ -16,6 +16,8 @@ export interface ReadRequest<T extends Row<unknown>> {
   headers: Record<string, string>
   signal: AbortSignal
   mode: 'long-poll' | 'sse'
+  /** Reevaluate dynamic authentication/parameters for native catch-up reads. */
+  resolveRequest(): Promise<{ url: URL; headers: Record<string, string> }>
   withTimeout<U>(promise: Promise<U>): Promise<U>
   onMetadata(metadata: ResponseMetadata): Promise<boolean>
   decode(

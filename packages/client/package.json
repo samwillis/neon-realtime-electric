@@ -10,9 +10,9 @@
     "url": "https://github.com/electric-sql/electric/issues"
   },
   "dependencies": {
+    "@durable-streams/client": "0.2.7",
     "@microsoft/fetch-event-source": "^2.0.1"
   },
-  "devDependencies": {},
   "type": "module",
   "exports": {
     "./package.json": "./package.json",
@@ -69,7 +69,8 @@
     "skills",
     "bin",
     "!skills/_artifacts",
-    "!src/react-native-shim.d.ts"
+    "!src/react-native-shim.d.ts",
+    "THIRD_PARTY_NOTICES.md"
   ],
   "homepage": "https://electric-sql.com",
   "license": "Apache-2.0",
@@ -99,5 +100,8 @@
         "./dist/index.d.ts"
       ]
     }
+  },
+  "devDependencies": {
+    "@neon/realtime-electric-protocol": "workspace:*"
   }
 }

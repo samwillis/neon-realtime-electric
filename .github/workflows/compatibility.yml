@@ -25,5 +25,9 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm build
       - run: pnpm test:client
+      - run: pnpm test:transport
       - run: pnpm test:package
+      - run: pnpm test:proxy
+      - run: pnpm test:durable-reader-install
+      - run: pnpm test:durable-reader
       - run: pnpm check:api

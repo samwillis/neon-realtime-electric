@@ -1,0 +1,14 @@
+{
+  "name": "@neon/realtime-electric-protocol",
+  "version": "0.1.0-dev.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./consumer": "./src/consumer.ts",
+    "./read-proof": "./src/read-proof.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  }
+}
