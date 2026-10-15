@@ -32,7 +32,10 @@ const mvcc = {
 }
 const row = { row_key: 'a'.repeat(64), values: ['9007199254740993', 'first'] }
 
-async function fixture(now?: () => number) {
+async function fixture(
+  now?: () => number,
+  replica: 'default' | 'full' = 'default'
+) {
   let observer: SourceObserver
   let cancelled = false
   const source: RealtimeSource = {
@@ -52,7 +55,11 @@ async function fixture(now?: () => number) {
       cancelled = true
     },
   }
-  const owner = new ShapeOwner({ source, definition, now })
+  const owner = new ShapeOwner({
+    source,
+    definition: { ...definition, replica },
+    now,
+  })
   await owner.start()
   return {
     owner,
@@ -104,7 +111,7 @@ describe('serialized source shape owner', () => {
   })
 
   it('classifies updates, removes, reinserts and key changes; ingestion continues without readers', async () => {
-    const f = await fixture()
+    const f = await fixture(undefined, 'full')
     try {
       f.push({ type: 'schema', columns })
       f.push({ type: 'baseline', rows: [row], mvcc })

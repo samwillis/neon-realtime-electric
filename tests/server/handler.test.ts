@@ -201,7 +201,7 @@ describe.each(['memory', 'objects'])(
         400
       )
       expect((await f.request('', 'POST')).status).toBe(405)
-      expect((await f.request('offset=now')).status).toBe(409)
+      expect((await f.request('offset=now')).status).toBe(200)
       expect((await f.request('live=sse')).status).toBe(400)
     })
 

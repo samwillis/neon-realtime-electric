@@ -23,6 +23,8 @@ export interface OwnerDefinition {
   /** Public projection. The source query also includes hidden primary-key columns. */
   projection: readonly string[]
   schema: Record<string, { type: string; [key: string]: unknown }>
+  logMode?: 'full' | 'changes_only'
+  replica?: 'default' | 'full'
 }
 
 export interface ShapeOwnerOptions {
@@ -30,6 +32,7 @@ export interface ShapeOwnerOptions {
   definition: OwnerDefinition
   now?: () => number
   ttlMs?: number
+  includeBaseline?: boolean
   onClose?: (event: { handle: string; error: Error }) => void
   createLog?: (context: { handle: string; expiresAt: number }) => ShapeLog
 }
@@ -140,7 +143,11 @@ export class ShapeOwner {
         for (const wire of event.rows) {
           const row = this.#decode(wire.values)
           this.#rows.set(wire.row_key, row)
-          changes.push(this.#change('insert', row))
+          if (
+            this.options.includeBaseline !== false &&
+            this.definition.logMode !== 'changes_only'
+          )
+            changes.push(this.#change('insert', row))
           if (changes.length === 128)
             this.#append({ kind: 'snapshot-chunk', changes: changes.splice(0) })
         }
@@ -242,10 +249,34 @@ export class ShapeOwner {
     row: RawRow,
     before?: RawRow
   ): RawChange {
+    const projected = this.#project(row)
+    const keys = new Set(this.definition.primaryKey)
+    const changed = before
+      ? this.definition.projection.filter(
+          (column) => row[column] !== before[column]
+        )
+      : []
+    const full = this.definition.replica === 'full'
+    const value =
+      full || operation === 'insert'
+        ? projected
+        : Object.fromEntries(
+            Object.entries(projected).filter(
+              ([column]) =>
+                keys.has(column) ||
+                (operation === 'update' && changed.includes(column))
+            )
+          )
     return {
       key: this.#key(row),
-      value: this.#project(row),
-      ...(before ? { old_value: this.#project(before) } : {}),
+      value,
+      ...(full && before
+        ? {
+            old_value: Object.fromEntries(
+              changed.map((column) => [column, before[column]])
+            ),
+          }
+        : {}),
       headers: {
         operation,
         relation: [this.definition.namespace, this.definition.table],

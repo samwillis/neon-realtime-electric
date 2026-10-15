@@ -159,13 +159,10 @@ export function resolveConfiguredShape(
     }
     predicate = ` WHERE ${parts.join(' AND ')}`
   }
-  for (const param of ['log', 'replica']) {
-    if (
-      url.searchParams.has(param) &&
-      url.searchParams.get(param) !== (param === 'log' ? 'full' : 'default')
-    )
-      fail(`${param} is not enabled in this shape profile`)
-  }
+  const logMode = url.searchParams.get('log') ?? 'full'
+  const replica = url.searchParams.get('replica') ?? 'default'
+  if (!['full', 'changes_only'].includes(logMode)) fail('Unsupported log mode')
+  if (!['default', 'full'].includes(replica)) fail('Unsupported replica mode')
   return {
     query: {
       sql: `SELECT ${selection.map(quote).join(', ')} FROM ${quote(table.namespace)}.${quote(table.table)}${predicate}`,
@@ -176,5 +173,7 @@ export function resolveConfiguredShape(
     primaryKey: table.primaryKey,
     projection,
     schema: Object.fromEntries(projection.map((p) => [p, table.columns[p]])),
+    ...(logMode === 'changes_only' ? ({ logMode } as const) : {}),
+    ...(replica === 'full' ? ({ replica } as const) : {}),
   }
 }

@@ -10,10 +10,10 @@ local/staging test target, as agreed in `AGENTS.md`.
 | 1: internal transport boundary                | Passed                                 | HTTP adapter extracted; all 553 baseline checks, build/typecheck, packed consumers and 62-export declaration comparison pass                                                                                                            |
 | 2: real Durable Streams delivery              | Implemented; final gate audit pending  | Real reader/reference server; 59 native/protocol tests, 18 packed proxy tests, consumer/lifecycle conformance and clean patch install; early real staging/Function no-reader lifecycle now passes                                       |
 | 3: real staging Realtime                      | Implemented in part; live gate passed  | Pinned SDK evidence patch, source adapter, serialized owner and bounded query compiler; real baseline/live publications and transaction evidence pass after enabling logical replication; see docs/staging-publication-investigation.md |
-| 4: Function handler and lifecycle             | Implemented in part; gates outstanding | Fetch read/HEAD/DELETE/long-poll handler, 64 server checks including real native reader; staging snapshot through `neon dev` passes; conformance audit outstanding; controlled two-process routing and real local no-reader replay pass |
-| 5: Object Storage                             | Implemented in part; gates outstanding | Shared memory/object index and replay tests, real S3 SDK/HTTP fixture, live staging Object Storage replay/cleanup pass; local object-backed baseline/lifecycle pass; real 15-minute TTL gate remains outstanding                        |
+| 4: Function handler and lifecycle             | Implemented in part; gates outstanding | Fetch read/HEAD/DELETE/long-poll/SSE handler, 81 server checks including real native reader; staging snapshot through `neon dev` passes; conformance audit outstanding; controlled two-process routing and real local no-reader replay pass |
+| 5: Object Storage                             | Implemented in part; gates outstanding | Shared memory/object index and replay tests, real S3 SDK/HTTP fixture, live staging Object Storage replay/cleanup pass; local object-backed baseline/lifecycle pass; real local 15-minute expiry/refetch run passes                        |
 | 6: replacement package/integrations           | Implemented; gate audit pending        | Fresh packed original/candidate React/TanStack builds and TS 5.5/5.9 compilation; Chrome baseline/live/auth/refetch and optimistic real tx acknowledgement pass                                                                         |
-| 7: complete API expansion                     | Pending                                | SSE, replica modes, changes-only/now, types, mobile lifecycle, broader SQL, subsets and exact MVCC/cut reconciliation                                                                                                                   |
+| 7: complete API expansion                     | Implemented in part                                | SSE, replica modes and changes-only/now implemented; full types/mobile lifecycle, broader SQL, subsets and exact MVCC/cut reconciliation remain                                                                                                                   |
 
 ## Upstream test disposition
 
@@ -219,12 +219,44 @@ commits an UPDATE that leaves the row unchanged, then resolves `awaitTxId` using
 the subsequent real source evidence. This covers an eager acknowledgement with
 no visible row change, beyond the ordinary optimistic mutation path.
 
-## Real expiry gate remains open
+## Real expiry evidence
 
 The object-backed run started at 21:08 UTC failed at its pre-expiry HEAD probe
 at 21:22:53 UTC, ten seconds before the advertised 21:23:03 deadline. HTTP 409
 means that handle was no longer usable; the run does not pass expiry acceptance.
 The available logs do not establish whether upstream continuity, local hot reload
-or the lifetime logic removed it. Periodic HEAD probes and persistent per-instance
-boot/owner-close diagnostics have been added for the next run. Earlier successful
-unit, simulated routing and browser tests do not replace this full-duration gate.
+or the lifetime logic removed it. A subsequent instrumented object-backed run
+completed the full 15-minute interval under `neon dev`: all 30 periodic HEAD
+probes retained the original handle, a read ten seconds before expiry succeeded,
+and the post-deadline read returned HTTP 409 with a replacement query-string
+handle and no redirect. The ignored report records the exact deadline and probe
+times. This passes the local expiry gate; platform execution guarantees remain
+unverified.
+
+
+## Phase 7 incremental evidence
+
+The server now serves SSE with the real Durable Streams client while preserving
+the configured path and Electric query/header forwarding. Controlled tests cover
+streaming, reconnect, refresh and owner-loss refetch across both log backends and
+header profiles. The packed Chrome suite passes all eight basic/custom/React/
+TanStack modes across long polling and SSE, including auth recovery and owner
+loss. Reconnect uses the last consumed checkpoint.
+
+`changes_only`, `offset=now` and both replica payload modes are implemented.
+The initial baseline is retained internally for classification but not exposed as
+history for changes-only/now readers. Readiness still requires real baseline MVCC.
+Full replica old values contain changed columns; default updates contain keys and
+changed projected fields. Twelve controlled mode tests and a real local Function
+run exercise cold readiness, future mutations and same-handle now resume. The
+current service-free server suite has 81 passing checks; transport checks remain
+59. Typecheck, pristine-file checks, public API comparison and packed integration
+compilation/build pass after these changes.
+
+Broader WHERE support remains pending: pass supported expressions and bound
+parameters through to Realtime after parser/structured-API validation, preserving
+authorization. Referenced-table-only changes, concurrent writes and independent
+Postgres comparisons at a synchronization boundary are required gates. The
+current bounded comparison/AND compiler remains the implemented query profile.
+Subsets, full type/mobile behavior and the remaining conformance/performance
+gates still prevent claiming full phase 7 or complete API compatibility.

@@ -28,6 +28,7 @@ under `neon dev`. It exercises baseline/live rows, custom parser/mapping, auth
 recovery, owner loss/refetch and an optimistic TanStack write acknowledged by
 its real database transaction ID, plus acknowledgement of a transaction that
 leaves the row unchanged. Only test-owned rows and handles are deleted.
+Each basic/custom/React/TanStack example runs in both polling and SSE mode.
 Reports are written under ignored `.artifacts/staging`.
 
 No client package has been published. The install fixture aliases a local tarball;

@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto'
 import { encodeReadProof } from '@neon/realtime-electric-protocol/read-proof'
 import type { RealtimeSource } from './realtime-source.js'
 import { ShapeOwner, type OwnerDefinition } from './shape-owner.js'
+import type { LogRead } from './shape-log.js'
 
 export interface AuthorizedShape {
   definition: OwnerDefinition
@@ -18,6 +19,8 @@ export interface ShapeHandlerOptions {
   ttlMs?: number
   longPollMs?: number
   maxEnvelopesPerRead?: number
+  /** Bound each SSE response; native readers reconnect at its consumed offset. */
+  sseConnectionMs?: number
   createLog?: import('./shape-owner.js').ShapeOwnerOptions['createLog']
   onOwnerClosed?: import('./shape-owner.js').ShapeOwnerOptions['onClose']
 }
@@ -58,7 +61,11 @@ export function createShapeHandler(options: ShapeHandlerOptions) {
       pendingCleanup.add(operation)
     }
   }
-  const create = (authorized: AuthorizedShape, identity: string) => {
+  const create = (
+    authorized: AuthorizedShape,
+    identity: string,
+    includeBaseline = true
+  ) => {
     const owner = new ShapeOwner({
       source: options.source,
       definition: authorized.definition,
@@ -66,6 +73,7 @@ export function createShapeHandler(options: ShapeHandlerOptions) {
       ttlMs: options.ttlMs,
       createLog: options.createLog,
       onClose: options.onOwnerClosed,
+      includeBaseline,
     })
     const cleanup = setTimeout(
       () => remove(owner.handle),
@@ -137,11 +145,11 @@ export function createShapeHandler(options: ShapeHandlerOptions) {
         )
         .digest('hex')
       const url = new URL(request.url)
-      if (url.searchParams.get('live') === 'sse')
-        return Response.json(
-          { error: 'SSE is not enabled for this shape profile' },
-          { status: 400, headers: cors }
-        )
+      const isSse =
+        url.searchParams.get('live') === 'sse' ||
+        (url.searchParams.get('live') === 'true' &&
+          (url.searchParams.get('live_sse') === 'true' ||
+            url.searchParams.get('experimental_live_sse') === 'true'))
       let handle = url.searchParams.get('handle')
       let entry = handle ? owners.get(handle) : undefined
       if (handle && !entry) return refetch(authorized, identity, request.method)
@@ -158,9 +166,9 @@ export function createShapeHandler(options: ShapeHandlerOptions) {
         if (request.method === 'HEAD')
           return new Response(null, { status: 404, headers: cors })
         const offset = url.searchParams.get('offset') ?? '-1'
-        if (offset !== '-1')
+        if (offset !== '-1' && offset !== 'now')
           return refetch(authorized, identity, request.method)
-        entry = create(authorized, identity)
+        entry = create(authorized, identity, offset !== 'now')
       }
       const owner = entry.owner
       try {
@@ -170,18 +178,23 @@ export function createShapeHandler(options: ShapeHandlerOptions) {
         return refetch(authorized, identity, request.method)
       }
       const offset = url.searchParams.get('offset') ?? '-1'
+      // A new `now` request must first observe initialization and the real
+      // source baseline barrier, without exposing historical rows. Existing
+      // handles can hydrate directly at the captured, immutable tail boundary.
+      const readOffset =
+        offset === 'now' ? (handle ? owner.log.head.offset : '-1') : offset
       let read
       try {
         read =
           request.method === 'HEAD'
             ? {
-                ...owner.log.inspect(offset),
+                ...owner.log.inspect(readOffset),
                 end: owner.log.head,
                 atTail: true,
                 envelopes: [],
               }
             : await owner.log.read(
-                offset,
+                readOffset,
                 options.maxEnvelopesPerRead,
                 request.signal
               )
@@ -199,11 +212,12 @@ export function createShapeHandler(options: ShapeHandlerOptions) {
       }
       if (
         request.method === 'GET' &&
+        !isSse &&
         read.envelopes.length === 0 &&
         ['true', 'long-poll'].includes(url.searchParams.get('live') ?? '')
       ) {
         await owner.log.wait(
-          offset,
+          readOffset,
           request.signal,
           Math.min(
             options.longPollMs ?? 20_000,
@@ -218,7 +232,7 @@ export function createShapeHandler(options: ShapeHandlerOptions) {
         }
         try {
           read = await owner.log.read(
-            offset,
+            readOffset,
             options.maxEnvelopesPerRead,
             request.signal
           )
@@ -258,6 +272,97 @@ export function createShapeHandler(options: ShapeHandlerOptions) {
       }
       if (request.method === 'HEAD')
         return new Response(null, { status: 200, headers })
+      if (isSse) {
+        // The facade enters SSE after its eager baseline. Headers carry the
+        // immutable schema for every subsequent data/control pair.
+        if (!owner.schema)
+          return Response.json(
+            { error: 'Initialize the shape before opening SSE' },
+            { status: 400, headers: cors }
+          )
+        headers.set('content-type', 'text/event-stream')
+        headers.set('x-accel-buffering', 'no')
+        headers.delete('Stream-Up-To-Date')
+        headers.delete('electric-up-to-date')
+        const stop = new AbortController()
+        const signal = AbortSignal.any([request.signal, stop.signal])
+        const deadline = Math.min(
+          owner.expiresAt,
+          now() + (options.sseConnectionMs ?? 20_000)
+        )
+        const encoder = new TextEncoder()
+        let initial: LogRead | undefined = read
+        let position = offset
+        return new Response(
+          new ReadableStream<Uint8Array>({
+            async pull(controller) {
+              try {
+                signal.throwIfAborted()
+                await owner.settled()
+                let batch = initial
+                initial = undefined
+                if (!batch) {
+                  batch = await owner.log.read(
+                    position,
+                    options.maxEnvelopesPerRead,
+                    signal
+                  )
+                  if (!batch.envelopes.length) {
+                    await owner.log.wait(
+                      position,
+                      signal,
+                      Math.max(1, Math.min(10_000, deadline - now()))
+                    )
+                    await owner.settled()
+                    batch = await owner.log.read(
+                      position,
+                      options.maxEnvelopesPerRead,
+                      signal
+                    )
+                  }
+                }
+                owner.assertValid()
+                const proof = encodeReadProof({
+                  version: 1,
+                  offset: batch.boundary.offset,
+                  afterSeq: batch.boundary.afterSeq,
+                  baselineComplete: batch.boundary.baselineComplete,
+                })
+                const control = {
+                  streamNextOffset: batch.end.offset,
+                  streamCursor: proof,
+                  upToDate: batch.atTail,
+                }
+                // JSON encoding keeps embedded CR/LF in values inside one SSE
+                // data line. Pair even empty data with its exact start proof.
+                controller.enqueue(
+                  encoder.encode(
+                    `event: data\ndata: ${JSON.stringify(batch.envelopes)}\n\nevent: control\ndata: ${JSON.stringify(control)}\n\n`
+                  )
+                )
+                position = batch.end.offset
+                if (now() >= deadline) controller.close()
+              } catch (error) {
+                if (!signal.aborted) {
+                  owner.close(
+                    error instanceof Error ? error : new Error(String(error))
+                  )
+                  remove(owner.handle)
+                  // A complete EOF sends the native reader back through HTTP,
+                  // where the invalidated handle receives an explicit refetch.
+                  controller.close()
+                } else {
+                  controller.error(error)
+                }
+              }
+            },
+            cancel() {
+              stop.abort()
+            },
+          }),
+          { status: 200, headers }
+        )
+      }
       return new Response(
         read.envelopes.length ? JSON.stringify(read.envelopes) : null,
         { status: read.envelopes.length ? 200 : 204, headers }

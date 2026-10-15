@@ -1,7 +1,9 @@
 import { createRoot } from 'react-dom/client'
 import { abort } from './shared'
 
-const mode = new URLSearchParams(location.search).get('mode') ?? 'basic'
+const mode =
+  new URLSearchParams(location.search).get('mode')?.replace(/-sse$/, '') ??
+  'basic'
 window.addEventListener('pagehide', () => abort.abort())
 async function start() {
   const View =

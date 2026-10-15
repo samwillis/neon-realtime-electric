@@ -76,6 +76,15 @@ describe('configured root-table POC definitions', () => {
       )
     ).toThrow('repeated')
   })
+  it('accepts changes-only logs and both replica modes without interpolating mode values into SQL', () => {
+    expect(resolve({ log: 'changes_only', replica: 'full' })).toMatchObject({
+      logMode: 'changes_only',
+      replica: 'full',
+    })
+    expect(resolve({ log: 'full', replica: 'default' }).query).toEqual(
+      resolve({}).query
+    )
+  })
   it.each([
     { where: 'id=$1', 'params[1]': '1', params: '[2]' },
     { where: 'id=$1', 'params[0]': '1' },
@@ -93,8 +102,8 @@ describe('configured root-table POC definitions', () => {
     { where: 'id = $1', params: '[9007199254740993]' },
     { where: 'id = 1 AND ' },
     { where: 'exists (select 1)' },
-    { log: 'changes_only' },
-    { replica: 'full' },
+    { log: 'unknown' },
+    { replica: 'unknown' },
   ])(
     'rejects unsupported or ambiguous definitions explicitly: %j',
     (params) => {

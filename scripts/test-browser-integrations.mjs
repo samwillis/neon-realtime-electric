@@ -52,7 +52,16 @@ try {
     'insert into public.electric_items(id,label,enabled) values($1,$2,true)',
     [id, 'browser baseline']
   )
-  for (const mode of ['basic', 'custom', 'react', 'tanstack']) {
+  for (const mode of [
+    'basic',
+    'custom',
+    'react',
+    'tanstack',
+    'basic-sse',
+    'custom-sse',
+    'react-sse',
+    'tanstack-sse',
+  ]) {
     const context = await browser.newContext()
     const page = await context.newPage()
     let rejected = false
@@ -95,7 +104,7 @@ try {
     })
     const rows = async () => {
       const value = JSON.parse(await page.getByTestId('rows').innerText())
-      return mode === 'custom'
+      return mode.startsWith('custom')
         ? value.map((row) => ({
             id: row.itemId,
             label: row.title,
@@ -104,7 +113,7 @@ try {
         : value
     }
     const expected = (label) =>
-      mode === 'custom' ? label.toUpperCase() : label
+      mode.startsWith('custom') ? label.toUpperCase() : label
     const until = async (predicate) => {
       const end = Date.now() + 25_000
       while (Date.now() < end) {
@@ -149,7 +158,7 @@ try {
         }) &&
         (await rows()).some((r) => r.id === id && r.label === expected(label))
     )
-    if (mode === 'tanstack') {
+    if (mode.startsWith('tanstack')) {
       let release
       const gate = new Promise((resolve) => {
         release = resolve
@@ -214,6 +223,14 @@ try {
           (await page.getByTestId('mutation').innerText()) === 'acknowledged'
       )
     }
+    if (mode.endsWith('-sse'))
+      assert(
+        requests.some(
+          (request) =>
+            new URL(request.url()).searchParams.get('live_sse') === 'true'
+        ),
+        'SSE mode never opened an SSE request'
+      )
     assert(requests.length > 2)
     for (const request of requests) {
       const url = new URL(request.url())

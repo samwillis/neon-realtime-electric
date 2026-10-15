@@ -40,20 +40,9 @@ export class DurableStreamsTransport<T extends Row<unknown>>
   }
 
   async read(request: ReadRequest<T>): Promise<void> {
-    if (request.mode === 'sse')
-      throw new InvalidShapeOptionsError(
-        'Durable Streams SSE is not enabled yet'
-      )
-    if (
-      request.url.searchParams.get('offset') === 'now' ||
-      request.url.searchParams.get('log') === 'changes_only'
-    ) {
-      throw new InvalidShapeOptionsError(
-        'Durable Streams changes_only/now requires a hydrated starting boundary and is not enabled yet'
-      )
-    }
     let session: StreamResponse<Envelope> | undefined
     const responses: { response: Response; offset: string }[] = []
+    let sseResponse: { response: Response; offset: string } | undefined
     let observedHandle = request.url.searchParams.get('handle')
     const offset = request.url.searchParams.get('offset') ?? '-1'
     const controller = new AbortController()
@@ -110,7 +99,12 @@ export class DurableStreamsTransport<T extends Row<unknown>>
       // Only queue metadata for a response actually returned to the reader.
       // If normalization throws, native fetch retries must not leave a stale
       // entry that would be paired with a later successful response body.
-      if (response.ok) responses.push({ response, offset: requestedOffset })
+      if (response.ok) {
+        const entry = { response, offset: requestedOffset }
+        if (response.headers.get('content-type')?.includes('text/event-stream'))
+          sseResponse = entry
+        else responses.push(entry)
+      }
       return normalized
     }
 
@@ -121,12 +115,12 @@ export class DurableStreamsTransport<T extends Row<unknown>>
         fetch: transportFetch,
         headers: request.headers,
         signal: controller.signal,
-        live: false,
+        live: request.mode === 'sse' ? 'sse' : false,
         json: true,
         backoffOptions: this.#backoff,
         warnOnHttp: false,
       })
-      const first = responses[0]
+      const first = responses[0] ?? sseResponse
       if (!first)
         throw new ShapeProtocolError('Missing initial response metadata')
       const firstMetadata = metadata(first.response)
@@ -134,19 +128,29 @@ export class DurableStreamsTransport<T extends Row<unknown>>
       this.#restoreConsumer(first.response, first.offset)
 
       session.subscribeJson(async (batch) => {
-        const entry = responses.shift()
+        const jsonEntry = responses.shift()
+        const isSse = !jsonEntry && !!sseResponse
+        const entry = jsonEntry ?? sseResponse
         if (!entry)
           throw new ShapeProtocolError('Missing batch response metadata')
-        const info = metadata(entry.response)
+        const proof = decodeReadProof(
+          isSse
+            ? (batch.cursor ?? null)
+            : entry.response.headers.get('electric-cursor')
+        )
+        const info = {
+          ...metadata(entry.response),
+          ...(isSse ? { cursor: batch.cursor ?? null } : {}),
+        }
         // Every row response repeats schema, including resume from a noninitial
         // offset. Initialization is allowed to precede schema availability.
         if (!(await request.onMetadata(info)))
           throw new ShapeProtocolError('Ignored batch metadata')
-        const proof = decodeReadProof(
-          entry.response.headers.get('electric-cursor')
-        )
+        const readOffset = isSse
+          ? this.#consumer!.state.checkpoint.offset
+          : entry.offset
         if (
-          proof.offset !== entry.offset ||
+          proof.offset !== readOffset ||
           proof.afterSeq !== this.#consumer!.state.appliedSeq
         ) {
           // During interrupted replay the consumer may already have applied
@@ -208,7 +212,7 @@ export class DurableStreamsTransport<T extends Row<unknown>>
           if (raw.length)
             await request.onMessages(
               request.decode(JSON.stringify(raw), info, 'array'),
-              false
+              isSse
             )
         })
         // Shared state gets the fully consumed response offset. Early metadata
@@ -221,7 +225,7 @@ export class DurableStreamsTransport<T extends Row<unknown>>
               ...(lastLsn ? { global_last_seen_lsn: lastLsn } : {}),
             },
           }
-          await request.onMessages([message], false)
+          await request.onMessages([message], isSse)
         }
       })
       await session.closed
@@ -242,6 +246,12 @@ export class DurableStreamsTransport<T extends Row<unknown>>
           error.url,
           error.message
         )
+      }
+      if (request.mode === 'sse' && error instanceof TypeError) {
+        // Interrupted response bodies are connection failures. The retained
+        // Electric SSE lifecycle retries from our last consumed checkpoint;
+        // protocol/JSON errors below keep their public FetchError boundary.
+        throw new Error('Durable Streams SSE connection interrupted')
       }
       if (
         error instanceof DurableStreamError ||
