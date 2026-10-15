@@ -12,3 +12,5 @@ junit/
 .artifacts/
 test-results/
 playwright-report/
+research/
+.private/
